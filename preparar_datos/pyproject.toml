@@ -1,0 +1,19 @@
+[project]
+name = "preparar-datos"
+version = "0.1.0"
+description = "Conversión de viajes DTPM en los segmentos que consume el visualizador de flujos."
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "pyarrow>=14",
+    "pyproj>=3.6",
+    "shapely>=2.0",
+    "networkx>=3.0",
+    "numpy>=1.24",
+    "h3>=4.0",
+]
+
+# Entorno para el conversor (dtpm_a_segmentos.py) y para la agregación (Main.py),
+# de modo que toda la generación de datos corra sin PostgreSQL.
+#   cd preparar_datos && uv sync
+#   uv run python dtpm_a_segmentos.py --muestra 2

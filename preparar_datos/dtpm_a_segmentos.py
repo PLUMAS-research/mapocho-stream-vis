@@ -1,0 +1,416 @@
+# %%
+"""Convierte los viajes DTPM en las dos tablas de segmentos que consume el pipeline.
+
+Entrada
+-------
+- Viajes DTPM (parquet particionado, un año): cada fila es un viaje con hasta
+  cuatro etapas. Por etapa k (1..4) se usan: tipo_transporte_k, paradero_subida_k,
+  paradero_bajada_k, tiempo_subida_k, tiempo_bajada_k. El peso del viaje es
+  factor_expansion (cuántos viajes reales representa el registro).
+- Catálogo de paraderos DTPM (parquet): código de paradero -> geometría (punto
+  en UTM 19S, EPSG:32719). Se reproyecta a WGS84.
+- Coordenadas de estaciones de Metro: json/MetroParaderos.json (nombre -> lat/lon).
+
+Salida
+------
+Dos parquet de segmentos dirigidos, con el esquema que espera el pipeline:
+- buses.parquet:  id, latinicial, loninicial, latfinal, lonfinal,
+                  tiempoinicial, tiempofinal, carga, horarango
+- metro.parquet:  estacioninicial, estacionfinal, latinicial, loninicial,
+                  latfinal, lonfinal, tiempoinicial, tiempofinal,
+                  horarango, tipodia, peso
+
+Criterios de mapeo
+------------------
+- Una etapa = un segmento dirigido (subida -> bajada).
+- Bus  = tipo_transporte 1 (RED). El paradero es un código; se geolocaliza con
+  el catálogo. El segmento es la cuerda recta subida->bajada (el pipeline rasteriza
+  los hexágonos sobre esa recta). carga = factor_expansion.
+- Metro = tipo_transporte 2. El paradero es un nombre de estación. La etapa se
+  rutea por el grafo de la red y se parte en segmentos estación a estación, con
+  el tiempo repartido uniforme. peso = factor_expansion.
+- tipo_transporte 3 (otros buses) y 4 (tren suburbano) quedan fuera por defecto,
+  para respetar el diseño de dos capas (bus RED + Metro).
+- Se descartan etapas sin bajada, con factor_expansion <= 0, o con tiempos inválidos.
+
+Ejecución (dentro del entorno de gds-course-materials, que ya trae pyarrow,
+pyproj, shapely y networkx):
+    cd app/preparar_datos && uv sync
+    uv run python dtpm_a_segmentos.py --muestra 2
+
+Rutas y parámetros se controlan por variables de entorno (ver bloque de config)
+o por argumentos de línea de comando.
+"""
+
+# %%
+import argparse
+import csv
+import io
+import json
+import os
+import zipfile
+from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.dataset as ds
+import pyarrow.parquet as pq
+from pyproj import Transformer
+from shapely import wkb
+
+import metro_red
+
+# %%
+# Configuración. Todo es sobreescribible por entorno o argumentos.
+GDS = Path(os.environ.get("GDS_DATA", Path.home() / "repositories/gds-course-materials/data"))
+TESIS_SRC = Path(os.environ.get("TESIS_SRC", Path(__file__).resolve().parent.parent / "src"))
+
+DEFAULTS = {
+    "viajes": GDS / "dtpm-viajes/dtpm-2023.parquet",
+    "paraderos": GDS / "dtpm-paraderos.parquet",
+    "metro_coords": TESIS_SRC / "json/MetroParaderos.json",
+    "metro_red": TESIS_SRC / "json/RedMetro.json",
+    "salida": TESIS_SRC / "json/segmentos",
+}
+
+# tipo_transporte -> modo lógico
+MODOS_BUS = {"1"}      # RED. Agrega "3" si quieres incluir otros buses.
+MODO_METRO = "2"
+# tipodia DTPM considerado laboral. En 2023 el valor observado es "0".
+TIPODIA_LABORAL = set(os.environ.get("TIPODIA_LABORAL", "0").split(","))
+# CRS de la geometría del catálogo de paraderos (UTM 19S para Santiago).
+CRS_PARADEROS = int(os.environ.get("CRS_PARADEROS", "32719"))
+
+# Columnas del catálogo de paraderos, con tolerancia a las dos versiones del
+# archivo (el catálogo regenerado usa snake_case; el original, nombres largos).
+COLS_CODIGO_TS = ("codigo_ts", "Código paradero TS")
+COLS_CODIGO_USUARIO = ("codigo_usuario", "Código paradero Usuario")
+
+
+def _columna(columnas, candidatas, que):
+    for c in candidatas:
+        if c in columnas:
+            return c
+    raise SystemExit(f"El catálogo no trae la columna de {que} (busqué {candidatas}).")
+
+ESQUEMA_BUSES = pa.schema([
+    ("id", pa.int64()),
+    ("latinicial", pa.float64()), ("loninicial", pa.float64()),
+    ("latfinal", pa.float64()), ("lonfinal", pa.float64()),
+    ("tiempoinicial", pa.timestamp("us")), ("tiempofinal", pa.timestamp("us")),
+    ("carga", pa.float64()), ("horarango", pa.int32()),
+])
+ESQUEMA_METRO = pa.schema([
+    ("estacioninicial", pa.string()), ("estacionfinal", pa.string()),
+    ("latinicial", pa.float64()), ("loninicial", pa.float64()),
+    ("latfinal", pa.float64()), ("lonfinal", pa.float64()),
+    ("tiempoinicial", pa.string()), ("tiempofinal", pa.string()),
+    ("horarango", pa.int32()), ("tipodia", pa.string()), ("peso", pa.float64()),
+])
+
+
+# %%
+def cargar_coords_paraderos(ruta_paraderos):
+    """Lee el catálogo y devuelve {codigo_ts: (lon, lat)} en WGS84."""
+    print(f"[paraderos] leyendo catálogo: {ruta_paraderos}")
+    par = pd.read_parquet(ruta_paraderos)
+    col = _columna(par.columns, COLS_CODIGO_TS, "código TS")
+    transformer = Transformer.from_crs(CRS_PARADEROS, 4326, always_xy=True)
+    coords = {}
+    for codigo, geom in zip(par[col].astype(str), par["geometry"]):
+        try:
+            punto = wkb.loads(bytes(geom))
+            lon, lat = transformer.transform(punto.x, punto.y)
+            coords[codigo] = (lon, lat)
+        except Exception:
+            continue
+    print(f"[paraderos] {len(coords)} paraderos geolocalizados (CRS {CRS_PARADEROS} -> 4326)")
+    return coords
+
+
+def cargar_coords_paraderos_gtfs(ruta_gtfs_zip, ruta_catalogo):
+    """Coordenadas de paraderos desde el stops.txt del feed GTFS. El catálogo
+    DTPM se usa solo como mapa de códigos (codigo_ts -> codigo_usuario, que es
+    el stop_id del feed); la geometría sale del feed. Es el camino del contrato
+    genérico viajes + GTFS. Medido contra el catálogo (feed 2026): misma
+    ubicación en la práctica (mediana 0 m, p99 8.3 m) y cobertura de etapas
+    99.1% contra 99.2%, pero NO reproduce bit a bit las matrices generadas con
+    el catálogo; para regenerar los datos publicados usar el default."""
+    print(f"[paraderos] leyendo stops.txt del GTFS: {ruta_gtfs_zip}")
+    with zipfile.ZipFile(ruta_gtfs_zip) as zf, zf.open("stops.txt") as f:
+        stops = {}
+        for s in csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig")):
+            if s.get("location_type", "0") not in ("", "0"):
+                continue
+            try:
+                stops[s["stop_id"]] = (float(s["stop_lon"]), float(s["stop_lat"]))
+            except (KeyError, ValueError):
+                continue
+    par = pd.read_parquet(ruta_catalogo)
+    col_ts = _columna(par.columns, COLS_CODIGO_TS, "código TS")
+    col_usuario = _columna(par.columns, COLS_CODIGO_USUARIO, "código de usuario")
+    coords = {}
+    for ts, usuario in zip(par[col_ts].astype(str), par[col_usuario].astype(str)):
+        if usuario in stops:
+            coords[ts] = stops[usuario]
+    print(f"[paraderos] {len(coords)} paraderos geolocalizados vía GTFS "
+          f"({len(stops)} stops en el feed)")
+    return coords
+
+
+def cargar_coords_metro(ruta_metro_coords):
+    """Lee json/MetroParaderos.json y devuelve {nombre_estacion: (lat, lon)}."""
+    print(f"[metro] leyendo coordenadas de estaciones: {ruta_metro_coords}")
+    with open(ruta_metro_coords, encoding="utf-8") as f:
+        data = json.load(f)
+    coords = {m["nombre"]: (float(m["latitud"]), float(m["longitud"])) for m in data["metros"]}
+    print(f"[metro] {len(coords)} estaciones con coordenadas")
+    return coords
+
+
+def etapas_largas(df):
+    """Pasa un fragmento de viajes (formato ancho, hasta 4 etapas) a formato
+    largo: una fila por etapa, con columnas modo, sub, baj, t_sub, t_baj, factor."""
+    piezas = []
+    for k in range(1, 5):
+        cols = {
+            f"tipo_transporte_{k}": "modo",
+            f"paradero_subida_{k}": "sub",
+            f"paradero_bajada_{k}": "baj",
+            f"tiempo_subida_{k}": "t_sub",
+            f"tiempo_bajada_{k}": "t_baj",
+        }
+        if not all(c in df.columns for c in cols):
+            continue
+        pieza = df[list(cols) + ["factor_expansion"]].rename(columns=cols)
+        piezas.append(pieza)
+    largo = pd.concat(piezas, ignore_index=True)
+    largo["factor"] = pd.to_numeric(largo["factor_expansion"], errors="coerce")
+    # Filtros comunes: etapa completa y con peso positivo.
+    largo = largo[
+        (largo["modo"].notna())
+        & (largo["sub"].notna()) & (largo["sub"] != "-")
+        & (largo["baj"].notna()) & (largo["baj"] != "-")
+        & (largo["t_sub"].notna()) & (largo["t_sub"] != "-")
+        & (largo["t_baj"].notna()) & (largo["t_baj"] != "-")
+        & (largo["factor"] > 0)
+    ]
+    return largo
+
+
+def construir_buses(largo, coords_par, id_inicial):
+    """Construye filas de segmentos de bus desde las etapas largas."""
+    bus = largo[largo["modo"].isin(MODOS_BUS)].copy()
+    if bus.empty:
+        return None, id_inicial
+
+    lon_ini, lat_ini = zip(*(coords_par.get(c, (np.nan, np.nan)) for c in bus["sub"]))
+    lon_fin, lat_fin = zip(*(coords_par.get(c, (np.nan, np.nan)) for c in bus["baj"]))
+    bus["loninicial"], bus["latinicial"] = lon_ini, lat_ini
+    bus["lonfinal"], bus["latfinal"] = lon_fin, lat_fin
+    bus["tiempoinicial"] = pd.to_datetime(bus["t_sub"], errors="coerce")
+    bus["tiempofinal"] = pd.to_datetime(bus["t_baj"], errors="coerce")
+
+    bus = bus.dropna(subset=["loninicial", "latinicial", "lonfinal", "latfinal",
+                             "tiempoinicial", "tiempofinal"])
+    if bus.empty:
+        return None, id_inicial
+
+    bus["horarango"] = bus["tiempoinicial"].dt.hour.astype("int32")
+    bus["id"] = np.arange(id_inicial, id_inicial + len(bus), dtype="int64")
+    bus = bus.rename(columns={"factor": "carga"})
+    salida = bus[["id", "latinicial", "loninicial", "latfinal", "lonfinal",
+                  "tiempoinicial", "tiempofinal", "carga", "horarango"]]
+    return pa.Table.from_pandas(salida, schema=ESQUEMA_BUSES, preserve_index=False), id_inicial + len(bus)
+
+
+def construir_metro(largo, grafo, coords_metro, cache_rutas):
+    """Construye filas de segmentos de Metro ruteando cada etapa por la red."""
+    metro = largo[largo["modo"] == MODO_METRO]
+    if metro.empty:
+        return None, 0
+
+    filas = []
+    sin_ruta = 0
+    for sub, baj, t_sub, t_baj, factor in zip(
+        metro["sub"], metro["baj"], metro["t_sub"], metro["t_baj"], metro["factor"]
+    ):
+        par = (sub, baj)
+        if par not in cache_rutas:
+            cache_rutas[par] = metro_red.camino_estaciones(grafo, sub, baj)
+        estaciones = cache_rutas[par]
+        if len(estaciones) < 2:
+            sin_ruta += 1
+            continue
+
+        ts = pd.to_datetime(t_sub, errors="coerce")
+        tb = pd.to_datetime(t_baj, errors="coerce")
+        if pd.isna(ts) or pd.isna(tb):
+            continue
+        horarango = int(ts.hour)
+
+        for estIni, estFin, hIni, hFin in metro_red.segmentos_con_tiempo(
+            estaciones, ts.to_pydatetime(), tb.to_pydatetime()
+        ):
+            ci = coords_metro.get(estIni)
+            cf = coords_metro.get(estFin)
+            if ci is None or cf is None:
+                continue
+            filas.append((
+                estIni, estFin, ci[0], ci[1], cf[0], cf[1],
+                hIni.strftime("%H:%M:%S"), hFin.strftime("%H:%M:%S"),
+                horarango, "LABORAL", float(factor),
+            ))
+
+    if not filas:
+        return None, sin_ruta
+
+    cols = list(zip(*filas))
+    tabla = pa.table({name: list(col) for name, col in zip(ESQUEMA_METRO.names, cols)},
+                     schema=ESQUEMA_METRO)
+    return tabla, sin_ruta
+
+
+# %%
+def main():
+    ap = argparse.ArgumentParser(description="Convierte viajes DTPM en segmentos de bus y Metro.")
+    ap.add_argument("--viajes", default=str(DEFAULTS["viajes"]))
+    ap.add_argument("--paraderos", default=str(DEFAULTS["paraderos"]))
+    ap.add_argument("--paraderos-gtfs", default=None, metavar="GTFS_ZIP",
+                    help="Geolocaliza los paraderos de bus con el stops.txt de este feed GTFS "
+                         "en vez de la geometría del catálogo (camino del contrato genérico; "
+                         "el catálogo sigue aportando el mapa codigo_ts -> stop_id).")
+    ap.add_argument("--metro-coords", default=str(DEFAULTS["metro_coords"]))
+    ap.add_argument("--metro-red", default=str(DEFAULTS["metro_red"]),
+                    help="RedMetro.json con la topología {linea: [estaciones]} (lo genera gtfs_a_metro.py).")
+    ap.add_argument("--salida", default=str(DEFAULTS["salida"]))
+    ap.add_argument("--muestra", type=int, default=0,
+                    help="Procesar solo los primeros N fragmentos (0 = todos). Para pruebas.")
+    args = ap.parse_args()
+
+    salida = Path(args.salida)
+    salida.mkdir(parents=True, exist_ok=True)
+    print("=" * 60)
+    print(f"Viajes:        {args.viajes}")
+    print(f"Paraderos:     {args.paraderos}")
+    print(f"Coords metro:  {args.metro_coords}")
+    print(f"Salida:        {salida}")
+    print(f"Modos bus:     {sorted(MODOS_BUS)} | modo metro: {MODO_METRO}")
+    print(f"tipodia laboral: {sorted(TIPODIA_LABORAL)}")
+    print(f"Muestra:       {args.muestra or 'todos los fragmentos'}")
+    print("=" * 60)
+
+    if args.paraderos_gtfs:
+        coords_par = cargar_coords_paraderos_gtfs(args.paraderos_gtfs, args.paraderos)
+    else:
+        coords_par = cargar_coords_paraderos(args.paraderos)
+    coords_metro = cargar_coords_metro(args.metro_coords)
+    with open(args.metro_red, encoding="utf-8") as f:
+        lineas_metro = json.load(f)["lineas"]
+    grafo = metro_red.construir_grafo(lineas_metro)
+    print(f"[metro] red: {len(lineas_metro)} líneas ({args.metro_red}) | "
+          f"grafo: {grafo.number_of_nodes()} nodos, {grafo.number_of_edges()} aristas")
+
+    columnas = ["tipodia", "factor_expansion"]
+    for k in range(1, 5):
+        columnas += [f"tipo_transporte_{k}", f"paradero_subida_{k}", f"paradero_bajada_{k}",
+                     f"tiempo_subida_{k}", f"tiempo_bajada_{k}"]
+
+    dataset = ds.dataset(args.viajes, format="parquet")
+    fragmentos = list(dataset.get_fragments())
+    if args.muestra:
+        fragmentos = fragmentos[:args.muestra]
+    print(f"[viajes] {len(fragmentos)} fragmentos a procesar")
+
+    writer_bus = pq.ParquetWriter(salida / "buses.parquet", ESQUEMA_BUSES)
+    writer_metro = pq.ParquetWriter(salida / "metro.parquet", ESQUEMA_METRO)
+    cache_rutas = {}
+    id_bus = 0
+    tot_bus = tot_metro = tot_sin_ruta = 0
+    # Conteo de demanda por hora (viajes expandidos a nivel de etapa, no de
+    # segmento). Reproduce la semántica de json/CantidadViajes.json.
+    conteo_bus = np.zeros(24)
+    conteo_metro = np.zeros(24)
+    # Fechas laborales distintas del extracto: normalizan los conteos (y, vía
+    # metadatos.json, los pesos de la agregación) a un día laboral promedio.
+    fechas = set()
+
+    try:
+        for n, frag in enumerate(fragmentos, 1):
+            df = frag.to_table(columns=[c for c in columnas if c in dataset.schema.names]).to_pandas()
+            df = df[df["tipodia"].isin(TIPODIA_LABORAL)]
+            if df.empty:
+                print(f"[frag {n}/{len(fragmentos)}] sin filas laborales, salto")
+                continue
+
+            largo = etapas_largas(df)
+
+            # Conteo de demanda por hora, a nivel de etapa (antes de rutear).
+            t_etapa = pd.to_datetime(largo["t_sub"], errors="coerce")
+            fechas.update(t_etapa.dropna().dt.date.unique())
+            hora_etapa = t_etapa.dt.hour
+            es_bus = largo["modo"].isin(MODOS_BUS) & hora_etapa.notna()
+            es_metro = (largo["modo"] == MODO_METRO) & hora_etapa.notna()
+            np.add.at(conteo_bus, hora_etapa[es_bus].astype(int).to_numpy(),
+                      largo.loc[es_bus, "factor"].to_numpy())
+            np.add.at(conteo_metro, hora_etapa[es_metro].astype(int).to_numpy(),
+                      largo.loc[es_metro, "factor"].to_numpy())
+
+            tabla_bus, id_bus = construir_buses(largo, coords_par, id_bus)
+            tabla_metro, sin_ruta = construir_metro(largo, grafo, coords_metro, cache_rutas)
+            tot_sin_ruta += sin_ruta
+
+            if tabla_bus is not None:
+                writer_bus.write_table(tabla_bus)
+                tot_bus += tabla_bus.num_rows
+            if tabla_metro is not None:
+                writer_metro.write_table(tabla_metro)
+                tot_metro += tabla_metro.num_rows
+
+            print(f"[frag {n}/{len(fragmentos)}] viajes={len(df)} "
+                  f"-> bus_seg={tabla_bus.num_rows if tabla_bus is not None else 0} "
+                  f"metro_seg={tabla_metro.num_rows if tabla_metro is not None else 0} "
+                  f"(acum bus={tot_bus}, metro={tot_metro})")
+    finally:
+        writer_bus.close()
+        writer_metro.close()
+
+    # Conteos por hora normalizados a día laboral promedio, junto a los demás
+    # JSON del visualizador. La app lee json/CantidadViajes.json.
+    n_dias = max(1, len(fechas))
+    ruta_conteos = TESIS_SRC / "json/CantidadViajes.json"
+    with open(ruta_conteos, "w", encoding="utf-8") as f:
+        json.dump({
+            "BUSES": [int(round(x / n_dias)) for x in conteo_bus],
+            "METRO": [int(round(x / n_dias)) for x in conteo_metro],
+        }, f, indent=2)
+
+    # Metadatos del extracto. FuenteDatos.py usa dias_laborales para llevar
+    # los pesos de la agregación a día laboral promedio.
+    ruta_metadatos = salida / "metadatos.json"
+    with open(ruta_metadatos, "w", encoding="utf-8") as f:
+        json.dump({
+            "dias_laborales": n_dias,
+            "fecha_min": str(min(fechas)) if fechas else None,
+            "fecha_max": str(max(fechas)) if fechas else None,
+        }, f, indent=2)
+
+    print("=" * 60)
+    print(f"Segmentos de bus:   {tot_bus}")
+    print(f"Segmentos de metro: {tot_metro}")
+    print(f"Etapas de metro sin ruta en el grafo: {tot_sin_ruta}")
+    print(f"Días laborales del extracto: {n_dias} "
+          f"({min(fechas) if fechas else '?'} -> {max(fechas) if fechas else '?'})")
+    print(f"Viajes expandidos/h bus, día promedio (pico):   "
+          f"{conteo_bus.max() / n_dias:.0f} en hora {conteo_bus.argmax()}")
+    print(f"Viajes expandidos/h metro, día promedio (pico): "
+          f"{conteo_metro.max() / n_dias:.0f} en hora {conteo_metro.argmax()}")
+    print(f"Escrito en: {salida}/buses.parquet, {salida}/metro.parquet")
+    print(f"Conteos en: {ruta_conteos} | Metadatos en: {ruta_metadatos}")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()

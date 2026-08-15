@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Mapocho, flujos de transporte público del Gran Santiago: campos vectoriales por hora de buses Red y Metro. Proyecto LOICA, ANID Fondecyt Regular 1261835."
+    />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <!--
+      manifest.json provides metadata used when your web app is installed on a
+      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
+    -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <!--
+      Notice the use of %PUBLIC_URL% in the tags above.
+      It will be replaced with the URL of the `public` folder during the build.
+      Only files inside the `public` folder can be referenced from the HTML.
+
+      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
+      work correctly both with client-side routing and a non-root public URL.
+      Learn how to configure a non-root public URL by running `npm run build`.
+    -->
+    <title>Mapocho - Flujos en SCL</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root">
+      <div class="splash-carga">
+        <div class="splash-spinner"></div>
+        <div class="splash-texto">Cargando Mapocho</div>
+      </div>
+    </div>
+    <style>
+      .splash-carga { position: fixed; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 16px; background: #0b0e14;
+        color: #d5d9e0; font-family: -apple-system, system-ui, sans-serif; }
+      .splash-spinner { width: 42px; height: 42px; border: 3px solid rgba(255, 255, 255, 0.15);
+        border-top-color: #0e7490; border-radius: 50%; animation: splash-giro 0.9s linear infinite; }
+      .splash-texto { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
+      @keyframes splash-giro { to { transform: rotate(360deg); } }
+    </style>
+    <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
+
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start`.
+      To create a production bundle, use `npm run build` or `yarn build`.
+    -->
+  </body>
+</html>

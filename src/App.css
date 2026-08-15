@@ -1,0 +1,174 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+.color-bar {
+  position: absolute;
+  bottom: 20px;
+  right: 20px; 
+  width: 200px;
+  background: linear-gradient(to right, yellow, orange, red);
+  border: 1px solid black;
+  padding: 2px 14px 2px 14px; 
+}
+
+.color-bar-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-top: 3px; 
+  margin-bottom: 3px; 
+
+}
+
+
+input[type="range"] {
+  appearance: none;
+  height: 8px;
+  background-color: #555;
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background-color: #00aaff;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.custom-slider-compact {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px; /* Más delgado */
+  background: linear-gradient(to right, #3a3a4a, #4a90e2);
+  border-radius: 2px;
+  outline: none;
+}
+
+.custom-slider-compact::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; /* Más pequeño */
+  height: 14px;
+  border-radius: 50%;
+  background: #4a90e2;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  border: 2px solid white;
+}
+
+.custom-slider-compact::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4a90e2;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  border: 2px solid white;
+}
+/* --- Estética de la interfaz ------------------------------------------- */
+/* Space Grotesk en toda la interfaz (los canvas del mapa no la usan). */
+body {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+}
+
+/* Botones: mayúsculas con tracking y esquinas rectas, registro técnico. */
+button {
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+/* Sliders con el acento de la interfaz. */
+input[type="range"] {
+  accent-color: #0e7490;
+}
+
+/* Controles de MapLibre (escala y atribución): el contenedor completo se
+   corre hacia el centro para no quedar bajo la paleta de colores. */
+.maplibregl-ctrl-bottom-right {
+  right: 330px;
+  bottom: 10px;
+}
+
+/* Escala del mapa con aspecto clásico de barra (no de botón), legible sobre
+   el estilo oscuro por omisión. */
+.maplibregl-ctrl-scale {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-top: none;
+  color: #d5d9e0;
+  font-size: 10px;
+  font-family: inherit;
+  text-align: center;
+}
+
+/* En pantallas angostas los controles de MapLibre vuelven a la esquina (la
+   paleta se oculta) y quedan sobre la barra de tiempo inferior. */
+@media (max-width: 700px) {
+  .maplibregl-ctrl-bottom-right {
+    right: 12px;
+    bottom: 64px;
+  }
+  .maplibregl-ctrl-scale {
+    display: none;
+  }
+}
+
+/* Spinner del aviso de carga de datos por hora. */
+.spinner-carga {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #67e8f9;
+  border-radius: 50%;
+  display: inline-block;
+  animation: giro-carga 0.8s linear infinite;
+}
+@keyframes giro-carga { to { transform: rotate(360deg); } }
