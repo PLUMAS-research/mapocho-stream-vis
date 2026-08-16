@@ -1,25 +1,25 @@
-"""Deriva desde un feed GTFS los insumos de Metro del visualizador:
+"""Derives the visualizer's Metro inputs from a GTFS feed:
 
-  - src/json/RedMetro.json        : topología {linea: [estaciones en orden]}.
-  - src/json/MetroParaderos.json  : tabla estación -> lat/lon (clave "metros").
-  - src/json/LineasMetro.json     : trazado por línea con su color.
-  - src/json/HexMetro_r<res>.json : par de estaciones contiguas -> celdas H3.
+  - src/json/RedMetro.json        : topology {line: [stations in order]}.
+  - src/json/MetroParaderos.json  : station -> lat/lon table (key "metros").
+  - src/json/LineasMetro.json     : per-line trace with its color.
+  - src/json/HexMetro_r<res>.json : contiguous station pair -> H3 cells.
 
-La topología (qué estaciones tiene cada línea, en qué orden) se deriva del
-propio feed: rutas con route_type 1 y la secuencia de paradas del viaje más
-largo de cada ruta (stop_times). No hay listas de estaciones escritas a mano;
-lo Santiago-específico que queda son el mapa de ortografías ALIAS_GTFS (traduce
-los nombres del GTFS a los canónicos de los datos DTPM) y ORDEN_GRAFO (ancla de
-reproducibilidad del desempate de rutas, ver su comentario). Una versión
-distinta del feed refleja otra fecha de la red: para reproducir los datos del
-paper hay que fijar el mismo GTFS.
+The topology (which stations each line has, in which order) is derived from
+the feed itself: route_type 1 routes and the stop sequence of the longest
+trip of each route (stop_times). There are no hand-written station lists;
+what remains Santiago-specific are the spelling map ALIAS_GTFS (translates
+GTFS names to the canonical names of the DTPM data) and ORDEN_GRAFO (a
+reproducibility anchor for route tie-breaking, see its comment). A different
+feed version reflects a different date of the network: to reproduce the
+paper's data, pin the same GTFS.
 
-Uso:
-    uv run python gtfs_a_metro.py                 # baja el GTFS por defecto y genera
+Usage:
+    uv run python gtfs_a_metro.py                 # downloads the default GTFS and generates
     uv run python gtfs_a_metro.py --gtfs-zip x.zip
     GTFS_URL=... uv run python gtfs_a_metro.py
 
-Todas las rutas y la URL se controlan por argumentos o variables de entorno.
+All paths and the URL are controlled by arguments or environment variables.
 """
 
 import argparse
@@ -35,36 +35,37 @@ from pathlib import Path
 
 import h3
 
-# URL del feed GTFS de DTPM. Una versión distinta refleja otra fecha de la red.
+# URL of the DTPM GTFS feed. A different version reflects a different network date.
 GTFS_URL_DEFAULT = "https://dtpm.cl/descargas/gtfs/GTFS_20260530_v2.zip"
 
-# route_type 1 = metro (subway) en la especificación GTFS.
+# route_type 1 = metro (subway) in the GTFS specification.
 ROUTE_TYPE_METRO = "1"
 
-# Orden de inserción de las líneas en RedMetro.json (las que existan; las demás
-# siguen en el orden de routes.txt). Existe solo por reproducibilidad: cuando dos
-# rutas de Metro empatan en costo, el desempate de Dijkstra depende del orden en
-# que se insertaron nodos y aristas al grafo, y este orden reproduce el de la
-# topología con que se generaron las matrices publicadas (28 de 7875 pares de
-# estaciones cambian de ruta si se altera). Con otra ciudad u otro feed la lista
-# no aplica y el orden natural de routes.txt es igual de válido.
+# Insertion order of the lines in RedMetro.json (those present; the rest
+# follow the routes.txt order). It exists only for reproducibility: when two
+# Metro routes tie in cost, Dijkstra's tie-breaking depends on the order in
+# which nodes and edges were inserted into the graph, and this order
+# reproduces the topology with which the published matrices were generated
+# (28 of 7875 station pairs change route if it is altered). With another city
+# or another feed the list does not apply and the natural routes.txt order is
+# just as valid.
 ORDEN_GRAFO = ["L6", "L3", "L2", "L1", "L5", "L4", "L4A"]
 
-# Colores por línea, RGB. Estos son los de la señalética de Metro de Santiago;
-# para una línea que no esté aquí se usa el route_color del feed GTFS.
+# Colors per line, RGB. These are the signage colors of Metro de Santiago;
+# for a line not listed here, the feed's route_color is used.
 COLORES_LINEAS = {
-    "L1": [227, 30, 36],    # roja
-    "L2": [255, 199, 0],    # amarilla
-    "L3": [139, 90, 43],    # café
-    "L4": [0, 90, 200],     # azul
-    "L4A": [0, 178, 227],   # celeste
-    "L5": [0, 154, 68],     # verde
-    "L6": [130, 60, 150],   # morada
+    "L1": [227, 30, 36],    # red
+    "L2": [255, 199, 0],    # yellow
+    "L3": [139, 90, 43],    # brown
+    "L4": [0, 90, 200],     # blue
+    "L4A": [0, 178, 227],   # light blue
+    "L5": [0, 154, 68],     # green
+    "L6": [130, 60, 150],   # purple
 }
 
-# Diferencias de ortografía entre el GTFS y los nombres canónicos de DTPM/topología.
-# Clave: nombre base del GTFS (ya sin acentos, mayúsculas, sin sufijo de dirección).
-# Valor: nombre canónico usado en los datos DTPM.
+# Spelling differences between the GTFS and the canonical DTPM names.
+# Key: GTFS base name (already without accents, uppercase, without the
+# direction suffix). Value: canonical name used in the DTPM data.
 ALIAS_GTFS = {
     "UNION LATINOAMERICANA": "UNION LATINO AMERICANA",
     "RONDIZZONI": "RONDIZONNI",
@@ -76,13 +77,13 @@ ALIAS_GTFS = {
 
 
 def normalizar(texto):
-    """Mayúsculas, sin acentos, sin espacios sobrantes."""
+    """Uppercase, no accents, no stray spaces."""
     texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
     return texto.upper().strip()
 
 
 def nombre_base(stop_name):
-    """Nombre de estación sin el sufijo ' DIRECCION X' de los andenes del GTFS."""
+    """Station name without the ' DIRECCION X' suffix of the GTFS platforms."""
     n = normalizar(stop_name)
     if " DIRECCION " in n:
         n = n.split(" DIRECCION ")[0].strip()
@@ -90,17 +91,17 @@ def nombre_base(stop_name):
 
 
 def descargar_gtfs(url, cache_dir):
-    """Descarga el zip GTFS a cache_dir si no está. Devuelve la ruta local."""
+    """Downloads the GTFS zip to cache_dir if absent. Returns the local path."""
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     destino = cache_dir / "gtfs.zip"
     if destino.exists():
-        print(f"[gtfs] usando cache: {destino} ({destino.stat().st_size // 1024} KB)")
+        print(f"[gtfs] using cache: {destino} ({destino.stat().st_size // 1024} KB)")
         return destino
-    print(f"[gtfs] descargando {url}")
+    print(f"[gtfs] downloading {url}")
     with urllib.request.urlopen(url, timeout=120) as resp, open(destino, "wb") as f:
         f.write(resp.read())
-    print(f"[gtfs] descargado: {destino} ({destino.stat().st_size // 1024} KB)")
+    print(f"[gtfs] downloaded: {destino} ({destino.stat().st_size // 1024} KB)")
     return destino
 
 
@@ -110,18 +111,19 @@ def _leer_csv(zf, nombre):
 
 
 def derivar_red(zip_path):
-    """Lee el feed una vez y deriva la red de Metro completa. Devuelve
+    """Reads the feed once and derives the whole Metro network. Returns
     (lineas, coords, colores_feed):
 
-      - lineas: {route_id: [estaciones en orden]} con nombres canónicos. La
-        secuencia de cada línea es la del viaje con más paradas de la ruta
-        (dirección 0 si existe); la orientación da lo mismo para el grafo y
-        para el trazado, y se verificó que tampoco cambia las celdas H3.
-      - coords: {nombre_canonico: (lat, lon)}, promediando los andenes.
-      - colores_feed: {route_id: [r, g, b]} desde route_color, si viene.
+      - lineas: {route_id: [stations in order]} with canonical names. The
+        sequence of each line is that of the trip with the most stops of the
+        route (direction 0 when present); the orientation does not matter for
+        the graph or the trace, and it was verified that it does not change
+        the H3 cells either.
+      - coords: {canonical_name: (lat, lon)}, averaging the platforms.
+      - colores_feed: {route_id: [r, g, b]} from route_color, when present.
 
-    El orden del dict `lineas` sigue ORDEN_GRAFO (ver arriba) y luego el orden
-    de routes.txt para líneas no listadas."""
+    The order of the `lineas` dict follows ORDEN_GRAFO (see above) and then
+    the routes.txt order for unlisted lines."""
     with zipfile.ZipFile(zip_path) as zf:
         rutas = [r for r in _leer_csv(zf, "routes.txt")
                  if r.get("route_type") == ROUTE_TYPE_METRO]
@@ -130,7 +132,7 @@ def derivar_red(zip_path):
         stop_times = _leer_csv(zf, "stop_times.txt")
 
     ids_metro = {r["route_id"] for r in rutas}
-    print(f"[gtfs] rutas con route_type {ROUTE_TYPE_METRO}: {sorted(ids_metro)}")
+    print(f"[gtfs] routes with route_type {ROUTE_TYPE_METRO}: {sorted(ids_metro)}")
 
     trip_ruta = {t["trip_id"]: (t["route_id"], t.get("direction_id", "0"))
                  for t in trips if t["route_id"] in ids_metro}
@@ -146,7 +148,7 @@ def derivar_red(zip_path):
             nombre = nombre_base(s["stop_name"])
             acumulado[nombre].append((float(s["stop_lat"]), float(s["stop_lon"])))
 
-    # Secuencia más larga por (ruta, dirección).
+    # Longest sequence per (route, direction).
     mejor = {}
     for tid, paradas in paradas_trip.items():
         ruta, dire = trip_ruta[tid]
@@ -162,7 +164,7 @@ def derivar_red(zip_path):
     for rid in orden_rutas:
         sec = mejor.get((rid, "0")) or mejor.get((rid, "1"))
         if not sec:
-            print(f"[aviso] ruta {rid} sin stop_times; se omite")
+            print(f"[aviso] route {rid} has no stop_times; skipped")
             continue
         nombres = []
         for sid in sec:
@@ -170,14 +172,14 @@ def derivar_red(zip_path):
             if not nombres or nombres[-1] != n:
                 nombres.append(n)
         lineas[rid] = nombres
-        print(f"[gtfs] {rid}: {len(nombres)} estaciones ({nombres[0]} -> {nombres[-1]})")
+        print(f"[gtfs] {rid}: {len(nombres)} stations ({nombres[0]} -> {nombres[-1]})")
 
     coords = {}
     for nombre, puntos in acumulado.items():
         lat = sum(p[0] for p in puntos) / len(puntos)
         lon = sum(p[1] for p in puntos) / len(puntos)
         coords[nombre] = (lat, lon)
-    print(f"[gtfs] estaciones de Metro con coordenadas: {len(coords)}")
+    print(f"[gtfs] Metro stations with coordinates: {len(coords)}")
 
     colores_feed = {}
     for r in rutas:
@@ -188,18 +190,18 @@ def derivar_red(zip_path):
 
 
 def escribir_redmetro(lineas, ruta_salida):
-    """Escribe RedMetro.json, la topología derivada del GTFS: {linea:
-    [estaciones en orden]}. La consume dtpm_a_segmentos.py para construir el
-    grafo de ruteo (el orden del dict fija el desempate, ver ORDEN_GRAFO)."""
+    """Writes RedMetro.json, the topology derived from the GTFS: {line:
+    [stations in order]}. dtpm_a_segmentos.py consumes it to build the
+    routing graph (the dict order fixes the tie-breaking, see ORDEN_GRAFO)."""
     with open(ruta_salida, "w", encoding="utf-8") as f:
         json.dump({"lineas": lineas}, f, ensure_ascii=False, indent=2)
     n_est = len({e for ests in lineas.values() for e in ests})
-    print(f"[metro] {ruta_salida}: {len(lineas)} líneas, {n_est} estaciones")
+    print(f"[metro] {ruta_salida}: {len(lineas)} lines, {n_est} stations")
 
 
 def escribir_metroparaderos(coords, lineas, ruta_salida):
-    """Escribe MetroParaderos.json con la tabla 'metros' (nombre -> lat/lon),
-    en el orden y los nombres de la topología derivada."""
+    """Writes MetroParaderos.json with the 'metros' table (name -> lat/lon),
+    in the order and with the names of the derived topology."""
     vistos = {}
     idx = 1
     for estaciones in lineas.values():
@@ -212,20 +214,20 @@ def escribir_metroparaderos(coords, lineas, ruta_salida):
     salida = {"metros": list(vistos.values())}
     with open(ruta_salida, "w", encoding="utf-8") as f:
         json.dump(salida, f, ensure_ascii=False, indent=4)
-    print(f"[metro] {ruta_salida}: {len(vistos)} estaciones")
+    print(f"[metro] {ruta_salida}: {len(vistos)} stations")
 
 
 def escribir_lineas_metro(coords, lineas, colores_feed, ruta_salida):
-    """Escribe LineasMetro.json: por cada línea, la polilínea [lon, lat] que une
-    sus estaciones en orden, más su color (COLORES_LINEAS si está, si no el
-    route_color del feed). Es el trazado esquemático de la red (segmentos rectos
-    estación a estación), que el frontend dibuja como capa de contexto
-    conmutable, independiente de las etiquetas de nombres. Si una estación no
-    tiene coordenadas en el feed, se corta la polilínea para no dibujar un salto
-    largo a través de la ciudad."""
+    """Writes LineasMetro.json: for each line, the [lon, lat] polyline that
+    joins its stations in order, plus its color (COLORES_LINEAS when present,
+    otherwise the feed's route_color). It is the schematic trace of the
+    network (straight station-to-station segments), which the frontend draws
+    as a toggleable context layer, independent of the name labels. If a
+    station has no coordinates in the feed, the polyline is cut so a long
+    jump is not drawn across the city."""
     salida_lineas = []
     for linea, estaciones in lineas.items():
-        # Segmentos contiguos con coordenadas; un hueco parte la polilínea.
+        # Contiguous segments with coordinates; a gap splits the polyline.
         tramos = [[]]
         for est in estaciones:
             if est in coords:
@@ -243,18 +245,18 @@ def escribir_lineas_metro(coords, lineas, colores_feed, ruta_salida):
     with open(ruta_salida, "w", encoding="utf-8") as f:
         json.dump({"lineas": salida_lineas}, f, ensure_ascii=False, indent=2)
     n_pol = sum(len(l["polilineas"]) for l in salida_lineas)
-    print(f"[metro] {ruta_salida}: {len(salida_lineas)} líneas, {n_pol} polilíneas")
+    print(f"[metro] {ruta_salida}: {len(salida_lineas)} lines, {n_pol} polylines")
 
 
-# --- Trazado sobre la grilla H3 -----------------------------------------------
+# --- Trace over the H3 grid ---------------------------------------------------
 
 def construir_hexmetro(coords, lineas, grilla):
-    """Para cada par de estaciones contiguas de cada línea, traza la línea de
-    celdas H3 entre ellas y devuelve {'A->B': [ids locales de celdas]}."""
+    """For each pair of contiguous stations of each line, traces the H3 cell
+    line between them and returns {'A->B': [local cell ids]}."""
     resolucion = grilla["resolucion"]
     h3_a_id = {c: i for i, c in enumerate(grilla["celdas"])}
 
-    # Celda H3 que contiene cada estación.
+    # H3 cell containing each station.
     celda_est = {est: h3.latlng_to_cell(lat, lon, resolucion)
                  for est, (lat, lon) in coords.items()}
 
@@ -283,7 +285,7 @@ def construir_hexmetro(coords, lineas, grilla):
                     ids.append(hid)
                     ultimo = hid
             rutas[f"{a}->{b}"] = ids
-    print(f"[metro] HexMetro: {len(rutas)} pares de estaciones contiguas")
+    print(f"[metro] HexMetro: {len(rutas)} contiguous station pairs")
     return rutas
 
 
@@ -291,36 +293,36 @@ def main():
     aqui = Path(__file__).resolve().parent
     src_json_def = aqui.parent / "src" / "json"
 
-    ap = argparse.ArgumentParser(description="Deriva insumos de Metro desde GTFS.")
+    ap = argparse.ArgumentParser(description="Derives the Metro inputs from GTFS.")
     ap.add_argument("--gtfs-url", default=os.environ.get("GTFS_URL", GTFS_URL_DEFAULT))
     ap.add_argument("--gtfs-zip", default=None,
-                    help="Ruta a un GTFS local; si se da, no se descarga.")
+                    help="Path to a local GTFS; when given, nothing is downloaded.")
     ap.add_argument("--cache-dir", default=os.environ.get("GTFS_CACHE", str(aqui / ".gtfs_cache")),
-                    help="Dónde guardar/buscar el zip GTFS descargado.")
+                    help="Where to store/look for the downloaded GTFS zip.")
     ap.add_argument("--salida-dir", default=str(src_json_def),
-                    help="Directorio src/json donde escribir los dos archivos.")
+                    help="src/json directory where the files are written.")
     ap.add_argument("--resolucion", default=os.environ.get("RESOLUCION_H3", "9"),
-                    help="Resolución H3 de la grilla (sufijo de los archivos).")
+                    help="H3 resolution of the grid (suffix of the files).")
     args = ap.parse_args()
 
     salida = Path(args.salida_dir)
     grilla_path = salida / f"Hexagon_r{args.resolucion}.json"
     if not grilla_path.exists():
-        raise SystemExit(f"Falta la grilla {grilla_path}. Corre antes CreacionGrilla.py.")
+        raise SystemExit(f"Missing grid {grilla_path}. Run CreacionGrilla.py first.")
 
     zip_path = Path(args.gtfs_zip) if args.gtfs_zip else descargar_gtfs(args.gtfs_url, args.cache_dir)
 
     lineas, coords, colores_feed = derivar_red(zip_path)
 
-    # Cobertura: estaciones de la topología sin coordenadas en este feed.
+    # Coverage: topology stations without coordinates in this feed.
     canonicas = {est for ests in lineas.values() for est in ests}
     faltan = sorted(canonicas - set(coords))
     if faltan:
-        print(f"[aviso] {len(faltan)} estaciones de la topología sin coordenadas en el GTFS:")
+        print(f"[aviso] {len(faltan)} topology stations without coordinates in the GTFS:")
         for f in faltan:
             print(f"        - {f}")
     else:
-        print(f"[gtfs] cobertura completa: las {len(canonicas)} estaciones de la topología tienen coordenadas.")
+        print(f"[gtfs] full coverage: all {len(canonicas)} topology stations have coordinates.")
 
     with open(grilla_path, encoding="utf-8") as f:
         grilla = json.load(f)
@@ -332,8 +334,8 @@ def main():
     hexmetro_path = salida / f"HexMetro_r{args.resolucion}.json"
     with open(hexmetro_path, "w", encoding="utf-8") as f:
         json.dump(rutas, f, ensure_ascii=False, indent=2)
-    print(f"[metro] {hexmetro_path}: {len(rutas)} entradas")
-    print("[ok] insumos de Metro generados desde GTFS.")
+    print(f"[metro] {hexmetro_path}: {len(rutas)} entries")
+    print("[ok] Metro inputs generated from GTFS.")
 
 
 if __name__ == "__main__":

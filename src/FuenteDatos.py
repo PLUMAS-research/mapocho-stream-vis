@@ -1,25 +1,25 @@
-"""Fuente de datos de segmentos para la agregación.
+"""Segment data source for the aggregation.
 
-El pipeline lee dos conjuntos de segmentos dirigidos: buses y Metro, desde
-json/segmentos/{buses,metro}.parquet (producidos por
-preparar_datos/dtpm_a_segmentos.py). No usa base de datos.
+The pipeline reads two sets of directed segments, buses and Metro, from
+json/segmentos/{buses,metro}.parquet (produced by
+preparar_datos/dtpm_a_segmentos.py). No database.
 
-Contrato de salida:
-- leer_segmentos_buses(hora) -> iterador de tuplas
+Output contract:
+- leer_segmentos_buses(hora) -> iterator of tuples
     (id, latIni, lonIni, latFin, lonFin, tIni, tFin, carga, horarango)
-    con tIni/tFin como datetime.datetime.
-- leer_segmentos_metro(hora) -> iterador de tuplas
+    with tIni/tFin as datetime.datetime.
+- leer_segmentos_metro(hora) -> iterator of tuples
     (estIni, estFin, latIni, lonIni, latFin, lonFin, tIni, tFin, peso)
-    con tIni/tFin como datetime.time.
+    with tIni/tFin as datetime.time.
 
-Las dos funciones devuelven generadores que recorren el parquet por lotes
-(ParquetFile.iter_batches) y filtran cada lote por hora. La memoria por
-proceso queda acotada por el lote (TAMANO_LOTE, configurable por entorno) y
-el row group, no por el tamaño del archivo: con el año completo (~164 M de
-segmentos de Metro, ~20 M en la hora pico) la versión anterior materializaba
-la hora entera como lista de tuplas (~4 GB por proceso) y con 17 procesos en
-paralelo gatillaba el OOM killer. Medido sobre la hora pico, esta versión
-mantiene el proceso bajo ~0.6 GB.
+Both functions return generators that walk the parquet in batches
+(ParquetFile.iter_batches) and filter each batch by hour. Memory per process
+is bounded by the batch (TAMANO_LOTE, configurable by environment) and the
+row group, not by file size: with the full extract (~164 M Metro segments,
+~20 M at the peak hour) the previous version materialized the whole hour as a
+list of tuples (~4 GB per process) and with 17 parallel processes it
+triggered the OOM killer. Measured at the peak hour, this version keeps the
+process under ~0.6 GB.
 """
 
 import os
@@ -29,22 +29,22 @@ import pandas as pd
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-# Rutas de los parquet de segmentos (relativas al cwd, que es src/).
+# Paths of the segment parquet files (relative to cwd, which is src/).
 DIR_SEGMENTOS = Path(os.environ.get("DIR_SEGMENTOS", "json/segmentos"))
 PARQUET_BUSES = DIR_SEGMENTOS / "buses.parquet"
 PARQUET_METRO = DIR_SEGMENTOS / "metro.parquet"
 
-# Filas por lote de lectura. Con ~250k filas cada lote pesa unas decenas de MB.
+# Rows per read batch. At ~250k rows each batch weighs a few tens of MB.
 TAMANO_LOTE = int(os.environ.get("TAMANO_LOTE", "262144"))
 
 
 def _dias_laborales():
-    """Días laborales distintos del extracto, desde metadatos.json (default 1).
+    """Distinct working days in the extract, from metadatos.json (default 1).
 
-    Los pesos (carga/peso = factor_expansion) se dividen por este número al
-    leer, de modo que las matrices agregadas representen un día laboral
-    promedio y no la suma del extracto completo. Las paletas y umbrales del
-    visualizador asumen esa escala. metadatos.json lo escribe
+    Weights (carga/peso = factor_expansion) are divided by this number on
+    read, so the aggregated matrices represent an average working day and not
+    the sum of the whole extract. The visualizer's palettes and thresholds
+    assume that scale. metadatos.json is written by
     preparar_datos/dtpm_a_segmentos.py.
     """
     import json
@@ -53,7 +53,7 @@ def _dias_laborales():
         with open(ruta, encoding="utf-8") as f:
             return max(1, int(json.load(f)["dias_laborales"]))
     except (FileNotFoundError, KeyError, ValueError):
-        print(f"[FuenteDatos] sin {ruta}; pesos sin normalizar por día")
+        print(f"[FuenteDatos] no {ruta}; weights not normalized per day")
         return 1
 
 
@@ -61,11 +61,11 @@ DIAS_LABORALES = _dias_laborales()
 
 
 def _lotes(ruta, columnas, mascara):
-    """Recorre el parquet por lotes filtrados, como DataFrames chicos.
+    """Walks the parquet in filtered batches, as small DataFrames.
 
-    mascara(lote) -> BooleanArray con las filas de la hora pedida. Se filtra
-    lote a lote (no hay pushdown útil: los row groups mezclan todas las
-    horas), y solo las filas que sobreviven se convierten a pandas.
+    mascara(lote) -> BooleanArray with the rows of the requested hour. The
+    filter runs batch by batch (no useful pushdown: row groups mix all
+    hours), and only the surviving rows are converted to pandas.
     """
     pf = pq.ParquetFile(ruta)
     for lote in pf.iter_batches(batch_size=TAMANO_LOTE, columns=columnas):
@@ -86,8 +86,8 @@ def _buses_parquet(hora):
         df = df[df[columnas[1:8]].notna().all(axis=1)]
         if df.empty:
             continue
-        # .tolist() sobre datetime64 entrega pd.Timestamp (subclase de
-        # datetime.datetime), compatible con la aritmética de los consumidores.
+        # .tolist() over datetime64 yields pd.Timestamp (a subclass of
+        # datetime.datetime), compatible with the consumers' arithmetic.
         yield from zip(
             df["id"].tolist(),
             df["latinicial"].tolist(), df["loninicial"].tolist(),
@@ -111,8 +111,8 @@ def _metro_parquet(hora):
         df = df[df[salida[2:8]].notna().all(axis=1)]
         if df.empty:
             continue
-        # Conversión vectorizada de "HH:MM:SS" a datetime.time (reemplaza un
-        # strptime por fila, que dominaba el tiempo de lectura).
+        # Vectorized conversion of "HH:MM:SS" to datetime.time (replaces a
+        # per-row strptime, which dominated the read time).
         tIni = pd.to_datetime(df["tiempoinicial"], format="%H:%M:%S").dt.time
         tFin = pd.to_datetime(df["tiempofinal"], format="%H:%M:%S").dt.time
         yield from zip(
@@ -125,13 +125,13 @@ def _metro_parquet(hora):
 
 
 # --------------------------------------------------------------------------
-# API pública
+# Public API
 # --------------------------------------------------------------------------
 def leer_segmentos_buses(hora):
-    print(f"[FuenteDatos] buses hora {hora} desde {PARQUET_BUSES}")
+    print(f"[FuenteDatos] buses hour {hora} from {PARQUET_BUSES}")
     return _buses_parquet(hora)
 
 
 def leer_segmentos_metro(hora):
-    print(f"[FuenteDatos] metro hora {hora} desde {PARQUET_METRO}")
+    print(f"[FuenteDatos] metro hour {hora} from {PARQUET_METRO}")
     return _metro_parquet(hora)

@@ -3,10 +3,10 @@ import json
 
 def suavizarMatriz(rutaVectoresEntrada, rutaPesosEntrada,
                    rutaVectoresSalida, rutaPesosSalida, vecinosPorCelda):
-    """Suaviza el campo sobre cada celda y sus vecinos H3 (precalculados en la
-    grilla, campo `vecinos`). El peso se promedia aritméticamente y el vector se
-    promedia ponderado por peso, igual que la versión anterior; solo cambia la
-    forma de obtener la vecindad (ahora es directa desde la grilla H3)."""
+    """Smooths the field over each cell and its H3 neighbors (precomputed in
+    the grid, field `vecinos`). The weight is averaged arithmetically and the
+    vector is averaged weighted by load, as in the previous version; only the
+    neighborhood lookup changed (it now comes directly from the H3 grid)."""
     with open(rutaVectoresEntrada, 'r') as f:
         matrizVectores = json.load(f)
 
@@ -20,7 +20,7 @@ def suavizarMatriz(rutaVectoresEntrada, rutaPesosEntrada,
     nuevosPesos = [0.0] * numCeldas
 
     for idx in range(numCeldas):
-        # La celda actual más sus vecinos H3.
+        # The current cell plus its H3 neighbors.
         indices = vecinosPorCelda[idx] + [idx]
 
         sumaPesos = sum(matrizPesos[i] for i in indices)
@@ -45,12 +45,12 @@ def suavizarMatriz(rutaVectoresEntrada, rutaPesosEntrada,
     else:
         diferenciaRelativa = 0 if nuevaCargaTotal == 0 else 100
 
-    print(f"Carga original: {cargaTotalOriginal:.6f} | nueva: {nuevaCargaTotal:.6f} "
-          f"| dif. relativa: {diferenciaRelativa:.4f}%")
+    print(f"Original load: {cargaTotalOriginal:.6f} | new: {nuevaCargaTotal:.6f} "
+          f"| relative diff: {diferenciaRelativa:.4f}%")
 
-    # Redondeo al escribir para achicar los JSON sin efecto visible: los vectores
-    # son ~1e-3 (8 decimales preservan la dirección) y los pesos son pasajeros
-    # expandidos (2 decimales bastan).
+    # Rounding on write to shrink the JSON with no visible effect: vectors are
+    # ~1e-3 (8 decimals preserve the direction) and weights are expanded
+    # passengers (2 decimals are enough).
     vectoresRed = [[round(x, 8), round(y, 8)] for x, y in nuevosVectores]
     pesosRed = [round(p, 2) for p in nuevosPesos]
     with open(rutaVectoresSalida, 'w') as f:

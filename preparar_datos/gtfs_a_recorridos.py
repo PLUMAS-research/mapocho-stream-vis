@@ -1,16 +1,16 @@
-"""Deriva desde el feed GTFS de DTPM la estructura de la red de buses (Red) como
-un conjunto de polilíneas, para dibujarla como capa de contexto en el frontend.
+"""Derives the bus network structure (Red) from the GTFS feed as a set of
+polylines, to draw it as a context layer in the frontend.
 
-  - src/json/LineasBuses.json : lista de recorridos [[lon, lat], ...].
+  - src/json/LineasBuses.json : list of routes [[lon, lat], ...].
 
-A diferencia del campo vectorial (que muestra el flujo de los viajes con demanda),
-esta capa muestra la traza física de la red: por dónde pasan las líneas de bus,
-tengan o no demanda en una hora dada. Se toma de shapes.txt las geometrías de las
-rutas de bus (route_type 3), se deduplican, se simplifican y se recortan al bbox
-de la grilla para acotar el tamaño del archivo.
+Unlike the vector field (which shows the flow of trips with demand), this
+layer shows the physical trace of the network: where the bus lines run,
+whether or not they carry demand at a given hour. The bus route geometries
+(route_type 3) are taken from shapes.txt, deduplicated, simplified, and
+clipped to the grid bbox to bound the file size.
 
-Uso:
-    uv run python gtfs_a_recorridos.py                 # usa el GTFS cacheado
+Usage:
+    uv run python gtfs_a_recorridos.py                 # uses the cached GTFS
     uv run python gtfs_a_recorridos.py --gtfs-zip x.zip
     GTFS_URL=... uv run python gtfs_a_recorridos.py
 """
@@ -28,13 +28,13 @@ from shapely.geometry import LineString, box
 
 from gtfs_a_metro import GTFS_URL_DEFAULT, descargar_gtfs
 
-# route_type 3 = bus en la especificación GTFS.
+# route_type 3 = bus in the GTFS specification.
 ROUTE_TYPE_BUS = "3"
 
-# Tolerancia de simplificación (grados). ~0.0003° ≈ 30 m en Santiago. Baja los
-# puntos por recorrido sin deformar la traza a la escala del mapa.
+# Simplification tolerance (degrees). ~0.0003 deg is ~30 m in Santiago. It
+# reduces the points per route without deforming the trace at map scale.
 TOLERANCIA_SIMPLIFICACION = 0.0003
-# Decimales de las coordenadas en el JSON (5 ≈ 1 m). Menos peso de archivo.
+# Coordinate decimals in the JSON (5 is ~1 m). Smaller file.
 DECIMALES = 5
 
 
@@ -44,16 +44,16 @@ def _leer_csv(zf, nombre):
 
 
 def shapes_de_buses(zip_path):
-    """Devuelve las polilíneas [[lon, lat], ...] de los shape_id usados por rutas
-    de bus, ordenadas por shape_pt_sequence."""
+    """Returns the polylines [[lon, lat], ...] of the shape_ids used by bus
+    routes, sorted by shape_pt_sequence."""
     with zipfile.ZipFile(zip_path) as zf:
         routes = _leer_csv(zf, "routes.txt")
         trips = _leer_csv(zf, "trips.txt")
-        # shapes.txt es grande: se lee en streaming, agrupando por shape_id.
+        # shapes.txt is large: it is streamed, grouping by shape_id.
         rutas_bus = {r["route_id"] for r in routes if r["route_type"] == ROUTE_TYPE_BUS}
         shapes_bus = {t["shape_id"] for t in trips
                       if t["route_id"] in rutas_bus and t.get("shape_id")}
-        print(f"[buses] rutas bus: {len(rutas_bus)}, shape_id únicos: {len(shapes_bus)}")
+        print(f"[buses] bus routes: {len(rutas_bus)}, unique shape_ids: {len(shapes_bus)}")
 
         puntos = defaultdict(list)
         with zf.open("shapes.txt") as f:
@@ -75,8 +75,8 @@ def shapes_de_buses(zip_path):
 
 
 def simplificar_y_recortar(polilineas, grilla):
-    """Simplifica cada polilínea, la recorta al bbox de la grilla y deduplica.
-    Devuelve la lista de recorridos [[lon, lat], ...] con coordenadas redondeadas."""
+    """Simplifies each polyline, clips it to the grid bbox, and deduplicates.
+    Returns the list of routes [[lon, lat], ...] with rounded coordinates."""
     bbox = box(grilla["minLon"], grilla["minLat"], grilla["maxLon"], grilla["maxLat"])
 
     vistos = set()
@@ -88,7 +88,7 @@ def simplificar_y_recortar(polilineas, grilla):
         recorte = linea.intersection(bbox)
         if recorte.is_empty:
             continue
-        # El recorte puede ser una LineString o una MultiLineString.
+        # The clip can be a LineString or a MultiLineString.
         geoms = recorte.geoms if recorte.geom_type == "MultiLineString" else [recorte]
         for g in geoms:
             if g.geom_type != "LineString" or g.length == 0:
@@ -108,21 +108,22 @@ def main():
     aqui = Path(__file__).resolve().parent
     src_json_def = aqui.parent / "src" / "json"
 
-    ap = argparse.ArgumentParser(description="Deriva la red de buses (polilíneas) desde GTFS.")
+    ap = argparse.ArgumentParser(description="Derives the bus network (polylines) from GTFS.")
     ap.add_argument("--gtfs-url", default=os.environ.get("GTFS_URL", GTFS_URL_DEFAULT))
     ap.add_argument("--gtfs-zip", default=None,
-                    help="Ruta a un GTFS local; si se da, no se descarga.")
+                    help="Path to a local GTFS; when given, nothing is downloaded.")
     ap.add_argument("--cache-dir", default=os.environ.get("GTFS_CACHE", str(aqui / ".gtfs_cache")),
-                    help="Dónde guardar/buscar el zip GTFS descargado.")
+                    help="Where to store/look for the downloaded GTFS zip.")
     ap.add_argument("--salida-dir", default=str(src_json_def),
-                    help="Directorio src/json donde escribir LineasBuses.json.")
-    ap.add_argument("--diametro", default="02", help="Sufijo de diámetro de la grilla (para el bbox).")
+                    help="src/json directory where LineasBuses.json is written.")
+    ap.add_argument("--resolucion", default=os.environ.get("RESOLUCION_H3", "9"),
+                    help="H3 resolution of the grid (suffix of Hexagon_r<res>.json, for the bbox).")
     args = ap.parse_args()
 
     salida = Path(args.salida_dir)
-    grilla_path = salida / f"Hexagon{args.diametro}.json"
+    grilla_path = salida / f"Hexagon_r{args.resolucion}.json"
     if not grilla_path.exists():
-        raise SystemExit(f"Falta la grilla {grilla_path}. Corre antes CreacionGrilla.py.")
+        raise SystemExit(f"Missing grid {grilla_path}. Run CreacionGrilla.py first.")
 
     zip_path = Path(args.gtfs_zip) if args.gtfs_zip else descargar_gtfs(args.gtfs_url, args.cache_dir)
 
@@ -132,15 +133,15 @@ def main():
     polilineas = shapes_de_buses(zip_path)
     recorridos = simplificar_y_recortar(polilineas, grilla)
     n_puntos = sum(len(r) for r in recorridos)
-    print(f"[buses] recorridos tras simplificar/recortar/deduplicar: {len(recorridos)} "
-          f"({n_puntos} puntos)")
+    print(f"[buses] routes after simplify/clip/dedupe: {len(recorridos)} "
+          f"({n_puntos} points)")
 
     ruta_salida = salida / "LineasBuses.json"
     with open(ruta_salida, "w", encoding="utf-8") as f:
         json.dump({"recorridos": recorridos}, f, ensure_ascii=False)
     tam_kb = ruta_salida.stat().st_size // 1024
-    print(f"[buses] {ruta_salida}: {len(recorridos)} recorridos ({tam_kb} KB)")
-    print("[ok] red de buses generada desde GTFS.")
+    print(f"[buses] {ruta_salida}: {len(recorridos)} routes ({tam_kb} KB)")
+    print("[ok] bus network generated from GTFS.")
 
 
 if __name__ == "__main__":

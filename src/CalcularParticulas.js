@@ -2,72 +2,69 @@
 const fs = require('fs');
 const path = require('path');
 
-// Configuración - cantidad de partículas a precalcular
+// Configuration - number of particles to precompute
 const CANTIDAD_PARTICULAS = 4000;
 
-// Sufijo de resolución H3 de las matrices de entrada (misma variable que el
-// pipeline Python). Por defecto r9.
+// H3 resolution suffix of the input matrices (same variable as the Python
+// pipeline). Default r9.
 const SUFIJO = 'r' + (process.env.RESOLUCION_H3 || '9');
 
-// Exponente de la asignación de semillas por hexágono. Con 1.0 la asignación
-// es proporcional a la carga y las semillas se concentran en los corredores
-// principales; con un exponente sublineal la densidad sigue ordenada por
-// demanda pero cubre también corredores secundarios (misma lógica que el
-// ancho de estela en raíz de la carga).
+// Exponent of the seed allocation per hexagon. With 1.0 the allocation is
+// proportional to the load and the seeds concentrate on the main corridors;
+// with a sublinear exponent the density stays ordered by demand but also
+// covers secondary corridors (same logic as the square-root streamlet width).
 const EXPONENTE_ASIGNACION = 0.6;
 
-// Carga mínima por hexágono para sembrar. Coincide con el umbral bajo el
-// cual el visualizador no dibuja la estela; sembrar bajo él desperdicia
-// partículas.
+// Minimum load per hexagon to seed. It matches the threshold below which the
+// visualizer does not draw the streamlet; seeding below it wastes particles.
 const UMBRAL_PESO = 10;
 
-// Horas del día a procesar (0-23)
+// Hours of the day to process (0-23)
 const HORAS = Array.from({ length: 24 }, (_, i) => i);
 
-// Modos de transporte a procesar
+// Transport modes to process
 const MODOS = ['buses', 'metro'];
 
-// Función para cargar datos de una hora específica
+// Loads the data of one specific hour
 function cargarDatosHora(hora, modo) {
   try {
-    console.log(`Cargando datos para ${modo} a las ${hora}:00...`);
-    
-    // Para el directorio usamos dos dígitos
+    console.log(`Loading data for ${modo} at ${hora}:00...`);
+
+    // Two digits for the directory
     const horaFormateada = hora.toString().padStart(2, '0');
-    // Para el nombre del archivo usamos el número sin ceros a la izquierda
+    // The file name uses the number without leading zeros
     const horaArchivo = hora.toString();
     const nombreModoCapitalizado = modo.charAt(0).toUpperCase() + modo.slice(1);
-    
-    // Construir la ruta correctamente
+
+    // Build the path
     const ruta = path.join(
-      __dirname, 
-      'json', 
-      modo, 
-      horaArchivo, 
+      __dirname,
+      'json',
+      modo,
+      horaArchivo,
       `MatrizPesos${nombreModoCapitalizado}_${SUFIJO}_${horaArchivo}.json`
     );
-    
-    console.log(`Buscando archivo en: ${ruta}`);
-    
-    // Resto del código sin cambios...
+
+    console.log(`Looking for file at: ${ruta}`);
+
     if (!fs.existsSync(ruta)) {
-      console.error(`Archivo no encontrado: ${ruta}`);
+      console.error(`File not found: ${ruta}`);
       return null;
     }
-    
+
     const datos = JSON.parse(fs.readFileSync(ruta, 'utf8'));
-    console.log(`Datos para ${modo} a las ${hora}:00 cargados exitosamente`);
+    console.log(`Data for ${modo} at ${hora}:00 loaded successfully`);
     return datos;
   } catch (error) {
-    console.error(`Error cargando datos para ${modo} hora ${hora}:`, error);
+    console.error(`Error loading data for ${modo} hour ${hora}:`, error);
     return null;
   }
 }
 
-// Función para calcular la distribución de partículas y la suma acumulada
+// Computes the particle distribution and the cumulative sum
 function calcularDistribucionParticulas(matrizPesos, cargaSistema, totalParticulas) {
 
-  // Si la carga del sistema es 0, no hay partículas para distribuir
+  // With zero system load there are no particles to distribute
   if (cargaSistema === 0) {
     return null;
   }
@@ -75,8 +72,8 @@ function calcularDistribucionParticulas(matrizPesos, cargaSistema, totalParticul
   const nHexagonos = matrizPesos.length;
   const sumaAcumulada = new Array(nHexagonos);
 
-  // Masa total de asignación: suma de peso^exponente sobre los hexágonos
-  // sembrables (peso >= umbral).
+  // Total allocation mass: sum of weight^exponent over the seedable hexagons
+  // (weight >= threshold).
   let masaTotal = 0;
   for (let i = 0; i < nHexagonos; i++) {
     if (matrizPesos[i] >= UMBRAL_PESO) {
@@ -87,7 +84,7 @@ function calcularDistribucionParticulas(matrizPesos, cargaSistema, totalParticul
     return null;
   }
 
-  // Precalcular números aleatorios para consistencia
+  // Precompute random numbers for consistency
   const numerosAleatorios = new Array(nHexagonos);
   for (let i = 0; i < nHexagonos; i++) {
     numerosAleatorios[i] = Math.random();
@@ -95,7 +92,7 @@ function calcularDistribucionParticulas(matrizPesos, cargaSistema, totalParticul
 
   let sumaActual = 0;
 
-  // Calcular distribución y suma acumulada en un solo paso
+  // Compute the distribution and the cumulative sum in one pass
   for (let hexId = 0; hexId < nHexagonos; hexId++) {
     const peso = matrizPesos[hexId];
 
@@ -104,7 +101,7 @@ function calcularDistribucionParticulas(matrizPesos, cargaSistema, totalParticul
       continue;
     }
 
-    // Cantidad esperada de partículas para este hexágono (redondeo estocástico)
+    // Expected number of particles for this hexagon (stochastic rounding)
     const particulasFloat =
       (Math.pow(peso, EXPONENTE_ASIGNACION) * totalParticulas) / masaTotal;
     const parteEntera = Math.floor(particulasFloat);
@@ -112,7 +109,7 @@ function calcularDistribucionParticulas(matrizPesos, cargaSistema, totalParticul
     const aleatorio = numerosAleatorios[hexId];
     const particulasEnteras = parteEntera + (aleatorio < fraccion ? 1 : 0);
 
-    // Actualizar suma acumulada
+    // Update the cumulative sum
     sumaActual += particulasEnteras;
     sumaAcumulada[hexId] = sumaActual;
   }
@@ -120,23 +117,23 @@ function calcularDistribucionParticulas(matrizPesos, cargaSistema, totalParticul
   return sumaAcumulada;
 }
 
-// Función principal para precalcular todas las partículas
+// Main function to precompute every particle
 function precalcularParticulas() {
-  console.log('Iniciando preprocesamiento de partículas...');
-  
-  // Almacenar distribuciones acumuladas por modo y hora
+  console.log('Starting particle preprocessing...');
+
+  // Cumulative distributions per mode and hour
   const distribucionesAcumuladas = {
     buses: {},
     metro: {}
   };
 
-  // Procesar cada modo y hora para calcular distribuciones acumuladas
+  // Process each mode and hour to compute the cumulative distributions
   for (const modo of MODOS) {
-    console.log(`\nProcesando modo: ${modo}`);
-    
+    console.log(`\nProcessing mode: ${modo}`);
+
     for (const hora of HORAS) {
-      console.log(`Procesando hora: ${hora}:00`);
-      
+      console.log(`Processing hour: ${hora}:00`);
+
       const datos = cargarDatosHora(hora, modo);
       if (datos) {
         const distribucion = calcularDistribucionParticulas(
@@ -144,116 +141,116 @@ function precalcularParticulas() {
         );
         distribucionesAcumuladas[modo][hora] = distribucion === null ? undefined : distribucion;
       }
-      
-      console.log(`Hora ${hora}:00 procesada para modo ${modo}`);
+
+      console.log(`Hour ${hora}:00 processed for mode ${modo}`);
     }
-    
-    console.log(`Modo ${modo} completado`);
+
+    console.log(`Mode ${modo} complete`);
   }
 
-  console.log('\nCalculando asignación de hexágonos por partícula...');
-  
-  // Calcular las partículas con sus hexágonos iniciales por hora
+  console.log('\nComputing the hexagon assignment per particle...');
+
+  // Particles with their initial hexagons per hour
   const particulasPrecalculadas = {
     buses: [],
     metro: []
   };
 
-  // Procesar cada modo para asignar hexágonos a las partículas
+  // Process each mode to assign hexagons to the particles
   for (const modo of MODOS) {
-    console.log(`\nAsignando hexágonos para modo: ${modo}`);
-    
-    // Inicializar índices de búsqueda por hora para optimización
+    console.log(`\nAssigning hexagons for mode: ${modo}`);
+
+    // Initialize search indices per hour, as an optimization
     const indicesActualesPorHora = {};
     for (const hora of HORAS) {
       indicesActualesPorHora[hora] = 0;
     }
 
-    // Crear las partículas para este modo
+    // Create the particles for this mode
     for (let idParticula = 0; idParticula < CANTIDAD_PARTICULAS; idParticula++) {
       const hexIdInicialesPorHora = new Array(24);
-      
-      // Para cada hora, encontrar el hexágono correspondiente a esta partícula
+
+      // For each hour, find the hexagon of this particle
       for (const hora of HORAS) {
         if (!distribucionesAcumuladas[modo][hora]) {
-          hexIdInicialesPorHora[hora] = 0; // Valor por defecto
+          hexIdInicialesPorHora[hora] = 0; // Default value
           continue;
         }
-        
+
         const sumaAcumulada = distribucionesAcumuladas[modo][hora];
         let indiceActual = indicesActualesPorHora[hora];
-        
-        // Optimización: comenzar desde el índice actual en lugar de desde 0
+
+        // Optimization: start from the current index instead of 0
         while (indiceActual < sumaAcumulada.length && idParticula >= sumaAcumulada[indiceActual]) {
           indiceActual++;
         }
-        
-        // Guardar el índice actual para la próxima partícula
+
+        // Keep the current index for the next particle
         indicesActualesPorHora[hora] = indiceActual;
-        
-        // Asegurarse de que no exceda los límites
+
+        // Stay within bounds
         hexIdInicialesPorHora[hora] = Math.min(indiceActual, sumaAcumulada.length - 1);
       }
-      
-      // Agregar la partícula precalculada
+
+      // Add the precomputed particle
       particulasPrecalculadas[modo].push({
         id: idParticula,
         hexIdIniciales: hexIdInicialesPorHora,
         tipo: modo
       });
     }
-    
-    console.log(`Modo ${modo}: ${CANTIDAD_PARTICULAS} partículas procesadas`);
+
+    console.log(`Mode ${modo}: ${CANTIDAD_PARTICULAS} particles processed`);
   }
 
-  console.log('\nPreprocesamiento de partículas completado');
+  console.log('\nParticle preprocessing complete');
   return particulasPrecalculadas;
 }
 
-// Función para guardar los datos precalculados en un formato optimizado
+// Saves the precomputed data in an optimized format
 function guardarParticulasPrecalculadas(nombreArchivo = 'particulasPrecalculadas.json') {
   try {
-    console.log('Iniciando guardado de partículas precalculadas...');
-    
+    console.log('Saving precomputed particles...');
+
     const particulas = precalcularParticulas();
-    
-    // Verificar que las partículas no estén vacías
+
+    // Check that the particles are not empty
     if (!particulas || Object.keys(particulas).length === 0) {
-      throw new Error('No se generaron partículas. Verifica los datos de entrada.');
+      throw new Error('No particles were generated. Check the input data.');
     }
-    
-    // Verificar que hay partículas para cada modo
+
+    // Check that each mode has particles
     for (const modo of MODOS) {
       if (!particulas[modo] || particulas[modo].length === 0) {
-        console.warn(`No se generaron partículas para el modo ${modo}`);
+        console.warn(`No particles generated for mode ${modo}`);
       } else {
-        console.log(`Modo ${modo}: ${particulas[modo].length} partículas generadas`);
+        console.log(`Mode ${modo}: ${particulas[modo].length} particles generated`);
       }
     }
-    
-    // Estructura optimizada para acceso rápido
+
+    // Structure optimized for fast access
     const datosOptimizados = {
       cantidadParticulas: CANTIDAD_PARTICULAS,
       particulas: particulas
     };
-    
-    // Guardar el archivo con indentación de 2 espacios
+
+    // Save the file with 2-space indentation
     fs.writeFileSync(nombreArchivo, JSON.stringify(datosOptimizados, null, 2));
-    
-    console.log(`Partículas precalculadas guardadas en ${nombreArchivo}`);
+
+    console.log(`Precomputed particles saved to ${nombreArchivo}`);
     return datosOptimizados;
   } catch (error) {
-    console.error('Error guardando partículas precalculadas:', error);
+    console.error('Error saving precomputed particles:', error);
     throw error;
   }
 }
 
-// Ejecutar la función principal si este archivo es ejecutado directamente
+// Run the main function when this file is executed directly
 if (require.main === module) {
   guardarParticulasPrecalculadas();
 }
 
-// Exportar funciones para uso externo
+// Export functions for external use
 module.exports = {
   precalcularParticulas,
   guardarParticulasPrecalculadas,

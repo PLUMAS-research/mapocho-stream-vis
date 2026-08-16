@@ -1,9 +1,9 @@
-// App.css va después del CSS de MapLibre para poder sobreescribir la posición
-// de sus controles (escala y atribución) en la cascada.
+// App.css goes after the MapLibre CSS so it can override the position of its
+// controls (scale and attribution) in the cascade.
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './App.css';
-// Tipografía autoalojada (sin CDN, coherente con la app sin dependencias
-// externas en runtime).
+// Self-hosted typography (no CDN, consistent with an app without external
+// runtime dependencies).
 import '@fontsource/space-grotesk/400.css';
 import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/700.css';
@@ -16,24 +16,24 @@ import * as h3 from 'h3-js';
 import cantidadViajesData from './json/CantidadViajes.json';
 import particulasPrecalculadas from './particulasPrecalculadas.json';
 
-// Grilla H3 y capas de contexto (independientes de la hora). Las matrices por
-// hora, incluida la inicial, se cargan de forma diferida (no se empaquetan).
+// H3 grid and context layers (independent of the hour). The per-hour
+// matrices, including the initial one, load lazily (they are not bundled).
 import hexGridData from './json/Hexagon_r10.json';
 import metroParaderosData from './json/MetroParaderos.json';
 import lineasMetroData from './json/LineasMetro.json';
 import lineasBusesData from './json/LineasBuses.json';
 import { CAPAS_EXTRA } from './capasExtra';
 
-// La grilla H3 se guarda mínima (solo los índices en `celdas`). Aquí, una vez al
-// cargar, derivamos la geometría que usa el resto: por celda su centro y sus
-// vecinos (por id local), y el mapa índice H3 -> id local. Son ~0.4 s para 105k
-// celdas a res 10, cubiertos por el splash de carga.
+// The H3 grid is stored minimal (only the indices in `celdas`). Here, once at
+// load time, we derive the geometry the rest uses: per cell its center and its
+// neighbors (by local id), and the H3 index -> local id map. It takes ~0.4 s
+// for 105k cells at res 10, covered by the loading splash.
 const hexagonosData = hexGridData.celdas.map((idx, id) => {
   const [lat, lon] = h3.cellToLatLng(idx);
   return { id, h3: idx, c: [lon, lat] };
 });
-// Objeto plano, no Map nativo: el componente Map de react-map-gl tapa el
-// constructor global Map en este módulo.
+// Plain object, not a native Map: the react-map-gl Map component shadows the
+// global Map constructor in this module.
 const h3ToId = Object.create(null);
 hexGridData.celdas.forEach((idx, id) => { h3ToId[idx] = id; });
 hexagonosData.forEach((hex) => {
@@ -44,15 +44,15 @@ hexagonosData.forEach((hex) => {
 
 
 
-// Parámetros para el mapa
-// Estilos de Carto servidos como style.json: los renderiza MapLibre sin token.
-// Variantes con etiquetas para mostrar nombres de calles y lugares.
+// Map parameters
+// Carto styles served as style.json: MapLibre renders them without a token.
+// Labeled variants to show street and place names.
 const EstiloMapaClaro = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 const EstiloMapaOscuro = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
-// Estilos raster de Carto: mismos mapas, en tiles de imagen. Renderizan bajo
-// Chromium headless (SwiftShader), donde el estilo vectorial no, así que son
-// la base de las capturas reproducibles del paper. Se activan con
-// ?estilo=raster (claro) y ?estilo=raster-oscuro.
+// Carto raster styles: the same maps, as image tiles. They render under
+// headless Chromium (SwiftShader), where the vector style does not, so they
+// are the basis of the paper's reproducible captures. Enabled with
+// ?estilo=raster (light) and ?estilo=raster-oscuro.
 const crearEstiloRaster = (capa) => ({
   version: 8,
   sources: {
@@ -70,15 +70,15 @@ const crearEstiloRaster = (capa) => ({
 const EstiloMapaRaster = crearEstiloRaster('light_all');
 const EstiloMapaRasterOscuro = crearEstiloRaster('dark_all');
 
-// Parámetros de URL para reproducir una vista exacta (capturas del paper y
-// enlaces compartibles). Ejemplo:
+// URL parameters to reproduce an exact view (paper captures and shareable
+// links). Example:
 //   ?hora=7&modo=buses&lat=-33.527&lon=-70.696&zoom=12.6
 //   &particulas=1&heatmap=1&trazado=0&redbuses=0&nombres=0
 //   &vectbuses=0&vectmetro=0&panel=0&ui=0&estilo=raster
-// Sin parámetros, la app se comporta igual que siempre.
-// Sufijo de resolución H3 de las matrices por hora. Debe coincidir con el de los
-// imports estáticos de arriba y con RESOLUCION_H3 del pipeline. Al cambiar de
-// resolución hay que regenerar los datos y actualizar ambos.
+// Without parameters, the app behaves as always.
+// H3 resolution suffix of the per-hour matrices. It must match the static
+// imports above and the pipeline's RESOLUCION_H3. Changing the resolution
+// requires regenerating the data and updating both.
 const SUFIJO_RES = 'r10';
 
 const PARAMS_URL = new URLSearchParams(window.location.search);
@@ -88,14 +88,14 @@ const paramNum = (clave, porDefecto) => {
   const v = parseFloat(PARAMS_URL.get(clave));
   return Number.isFinite(v) ? v : porDefecto;
 };
-// Hora válida (entero 0-23). Clampa y redondea; se usa para la URL y para el
-// valor guardado en localStorage, que puede venir corrupto.
+// Valid hour (integer 0-23). Clamps and rounds; used for the URL and for the
+// value stored in localStorage, which may come corrupted.
 const clampHora = (v) => Math.max(0, Math.min(23, Math.round(v)));
-// ui=0 oculta todo el chrome (barra, paneles, leyendas) para capturas limpias.
+// ui=0 hides all the chrome (bar, panels, legends) for clean captures.
 const MOSTRAR_UI = paramBool('ui', true);
 
-// Estilo compartido del chrome flotante: una sola fuente de fondos, bordes y
-// tamaños de control, para que cajas y botones queden consistentes entre sí.
+// Shared style of the floating chrome: a single source of backgrounds,
+// borders, and control sizes, so boxes and buttons stay consistent.
 const UI_ACENTO = '#0e7490';
 const UI_ACENTO_SUAVE = 'rgba(14, 116, 144, 0.55)';
 const UI_TEXTO = '#d5d9e0';
@@ -106,7 +106,7 @@ const CAJA_UI = {
   boxShadow: '0 2px 10px rgba(0, 0, 0, 0.35)',
   backdropFilter: 'blur(6px)',
 };
-// Botón independiente (con caja propia).
+// Standalone button (with its own box).
 const BOTON_UI = {
   ...CAJA_UI,
   color: 'white',
@@ -115,7 +115,7 @@ const BOTON_UI = {
   fontSize: '12px',
   fontWeight: '600',
 };
-// Botón dentro de una caja (hereda el fondo del contenedor).
+// Button inside a box (inherits the container background).
 const BOTON_PLANO = {
   background: 'transparent',
   border: 'none',
@@ -127,40 +127,41 @@ const BOTON_PLANO = {
   fontWeight: '500',
 };
 
-// Estaciones de metro (id, nombre, latitud, longitud) para las etiquetas.
+// Metro stations (id, name, latitude, longitude) for the labels.
 const ESTACIONES_METRO = metroParaderosData.metros || [];
-// Trazado de las líneas de metro: por línea, polilíneas [lon, lat] y color oficial.
+// Metro line traces: per line, [lon, lat] polylines and the official color.
 const LINEAS_METRO = lineasMetroData.lineas || [];
-// Estructura física de la red de buses: recorridos [[lon, lat], ...] de contexto.
+// Physical structure of the bus network: context routes [[lon, lat], ...].
 const RECORRIDOS_BUSES = lineasBusesData.recorridos || [];
-// Nivel de zoom inicial del heatmap. La resolución se fija con un slider, independiente de la
-// cámara, para que la huella geográfica del heatmap no cambie al navegar el mapa.
+// Initial heatmap zoom level. The resolution is set with a slider, independent
+// of the camera, so the heatmap's geographic footprint does not change while
+// navigating the map.
 const NIVEL_HEATMAP_INICIAL = 13;
-// Radio base del kernel del heatmap, en píxeles, medido al nivel elegido.
+// Base radius of the heatmap kernel, in pixels, measured at the chosen level.
 const RADIO_BASE_HEATMAP = 120;
-// Latitud de referencia (Santiago) para convertir el nivel de zoom a un radio en metros.
+// Reference latitude (Santiago) to convert the zoom level into a radius in meters.
 const LAT_REF_HEATMAP = -33.45;
-// Radio geográfico (m) del kernel para un nivel de zoom dado, según la escala Web Mercator.
+// Geographic radius (m) of the kernel for a given zoom level, per the Web Mercator scale.
 const radioHeatmapMetros = (nivel) =>
   RADIO_BASE_HEATMAP * 156543.03392 * Math.cos(LAT_REF_HEATMAP * Math.PI / 180) / Math.pow(2, nivel);
-// Bajo este zoom las 126 etiquetas de metro saturan la vista, por eso solo aparecen al acercar.
+// Below this zoom the 126 Metro labels saturate the view, so they only appear when zooming in.
 const ZOOM_MIN_ETIQUETAS_METRO = 12.5;
-// Perfil móvil: viewport angosto O dispositivo de puntero grueso. Un teléfono en
-// horizontal supera los 700px pero sigue siendo de gama baja, así que se combinan
-// ambas señales para no dejarlo fuera del perfil liviano.
+// Mobile profile: narrow viewport OR coarse-pointer device. A phone in
+// landscape exceeds 700px but is still low-end, so both signals combine to
+// keep it inside the light profile.
 const CONSULTA_MOVIL = '(max-width: 700px), (pointer: coarse)';
 
 
-//Definir valores importantes
+// Key visualization values
 const valoresVisualizacion = {
   GranSantiago: {
-    CantidadParticulas: 49, // Cantidad de partículas a mostrar
+    CantidadParticulas: 49, // Number of particles to show
     VidaParticulasMinima: 1500,
-    VidaParticulasMaxima: 4000, // La vide varia entre 1000 y 3000 ms
-    DuracionMuerteParticula: 500, // Duración de la transparencia de la partícula muerta
-    tiempoActualizacion: 100,    // Intervalo de actualización en de valores
-    transparenciaInicial: 235,   //factor de transparencia de particulas, sobre 255. Mientras mayor => más color
-    Vista: {                     // Vista por defecto: Metro Universidad de Chile (centro)
+    VidaParticulasMaxima: 4000, // Lifetime range in ms
+    DuracionMuerteParticula: 500, // Fade-out duration of a dead particle
+    tiempoActualizacion: 100,    // Value update interval
+    transparenciaInicial: 235,   // particle opacity factor, over 255; higher means more color
+    Vista: {                     // Default view: Metro Universidad de Chile (downtown)
       latitude: -33.4439,
       longitude: -70.6507,
       zoom: 11,
@@ -169,26 +170,26 @@ const valoresVisualizacion = {
     },
   },
 };
-// Definir límites por nivel de zoom
+// Camera limits per zoom level
 const limitesPorZoomLevel = {
-  1: { // Zoom lejano: el centro puede recorrer casi todo el bbox de la ciudad.
+  1: { // Far zoom: the center can travel almost the whole city bbox.
     minLon: -70.80, maxLon: -70.57, minLat: -33.60, maxLat: -33.39
   },
-  2: { // Zoom medio
+  2: { // Medium zoom
     minLon: -70.83, maxLon: -70.54, minLat: -33.63, maxLat: -33.36
   },
-  3: { // Zoom cercano: se explora de cerca, así que el paneo es el más amplio.
+  3: { // Near zoom: close-up exploration, so panning is the widest.
     minLon: -70.87, maxLon: -70.50, minLat: -33.67, maxLat: -33.33
   }
 };
 
-// Función para cargar datos dinámicamente
+// Loads the per-hour data dynamically
 const cargarDatos = async (hora) => {
   try {
-    // Extraer solo el número de la hora (ej: "8" de "08:00")
+    // Extract only the hour number (e.g. "8" from "08:00")
     const horaNum = parseInt(hora.split(':')[0], 10);
     
-    // Importar usando el número de hora directamente
+    // Import using the hour number directly
     const vectoresBuses = await import(`./json/buses/${horaNum}/MatrizVectoresBuses_${SUFIJO_RES}_${horaNum}.json`);
     const pesosBuses = await import(`./json/buses/${horaNum}/MatrizPesosBuses_${SUFIJO_RES}_${horaNum}.json`);
     const vectoresMetro = await import(`./json/metro/${horaNum}/MatrizVectoresMetro_${SUFIJO_RES}_${horaNum}.json`);
@@ -202,7 +203,7 @@ const cargarDatos = async (hora) => {
       MatrizPesosMetro: pesosMetro.default,
     };
   } catch (error) {
-    console.error("Error cargando datos:", error);
+    console.error("Error loading data:", error);
     return {
       status: 'error',
       message: `No se encontraron datos para las ${hora}`
@@ -213,8 +214,8 @@ const cargarDatos = async (hora) => {
 
 
 
-// Interpola un color dentro de una paleta de stops {limite, color, opacity}. Clampa
-// fuera de rango (igual que la capa de partículas). Devuelve [r, g, b].
+// Interpolates a color within a palette of stops {limite, color, opacity}.
+// Clamps out of range (like the particle layer). Returns [r, g, b].
 function interpolarColorStops(peso, colorStops) {
   if (peso <= colorStops[0].limite) return colorStops[0].color;
   const ultimo = colorStops[colorStops.length - 1];
@@ -232,9 +233,10 @@ function interpolarColorStops(peso, colorStops) {
   return lower.color.map((c0, i) => Math.round(c0 + t * (upper.color[i] - c0)));
 }
 
-// Construye los datos (path + color) de la capa de vectores. Solo incluye hexágonos
-// con vector no nulo, para no dibujar miles de flechas de largo cero. El resultado se
-// memoiza aguas arriba (useMemo) para no reconstruirlo en cada frame de la animación.
+// Builds the data (path + color) of the vector layer. It only includes
+// hexagons with a nonzero vector, to avoid drawing thousands of zero-length
+// arrows. The result is memoized upstream (useMemo) so it is not rebuilt on
+// every animation frame.
 function construirDatosVectores(vectores, pesos, hexagonos, colorStops, escala) {
   const datos = [];
   for (let hexId = 0; hexId < vectores.length; hexId++) {
@@ -250,46 +252,47 @@ function construirDatosVectores(vectores, pesos, hexagonos, colorStops, escala) 
 }
 
 
-// --- Streamlines (trayectorias del flujo, precalculadas) ---------------------
-// El flujo se anima en la GPU con TripsLayer sobre trayectorias fijas. Cada
-// trayectoria se calcula una vez por hora advectando una semilla por el campo de
-// vectores; animar solo mueve un reloj (currentTime), sin recomputar geometría en
-// JavaScript por frame.
-const STREAMLINE_MAX_PASOS = 100;    // vértices máximos por trayectoria
-const STREAMLINE_PASO = 0.00045;     // avance por paso, en grados (~medio radio de hex)
-const STREAMLINE_ESTELA = 24;        // largo visible de la estela (trailLength)
-// La animación avanza proporcional a la magnitud local del campo: cada paso
-// dura dt = 0.5/factor con factor acotado a [1/DT_MAX, DT_MAX]. Así las
-// estelas corren rápido en corredores de flujo fuerte y lento en zonas débiles.
+// --- Streamlines (precomputed flow trajectories) ------------------------------
+// The flow animates on the GPU with TripsLayer over fixed trajectories. Each
+// trajectory is computed once per hour by advecting a seed through the vector
+// field; animating only advances a clock (currentTime), with no per-frame
+// geometry recomputation in JavaScript.
+const STREAMLINE_MAX_PASOS = 100;    // maximum vertices per trajectory
+const STREAMLINE_PASO = 0.00045;     // advance per step, in degrees (~half a hex radius)
+const STREAMLINE_ESTELA = 24;        // visible trail length (trailLength)
+// The animation advances proportional to the local field magnitude: each step
+// lasts dt = 0.5/factor with the factor clamped to [1/DT_MAX, DT_MAX]. Trails
+// thus run fast along strong-flow corridors and slowly in weak zones.
 const STREAMLINE_DT_MAX = 2;
-// Periodo fijo del reloj. Cada estela reaparece varias veces por ciclo con
-// fase y pausa aleatorias (respawn continuo), y las apariciones que cruzan el
-// borde del ciclo se duplican desfasadas: la densidad en pantalla es
-// estacionaria y el wrap del reloj no corta estelas a medio camino.
+// Fixed clock period. Each trail reappears several times per cycle with
+// random phase and pause (continuous respawn), and appearances that cross the
+// cycle boundary are duplicated with an offset: the on-screen density is
+// stationary and the clock wrap does not cut trails midway.
 const STREAMLINE_LOOP = 240;
-const STREAMLINE_PAUSA_MIN = 20;     // pausa mínima entre reapariciones
-const STREAMLINE_PAUSA_MAX = 60;     // pausa máxima entre reapariciones
-// Guardas contra órbitas alrededor de sumideros: la trayectoria se detiene si
-// la dirección se invierte de golpe o si el giro acumulado CON SIGNO supera
-// ~0.85 vueltas (las curvas en S se cancelan; un círculo no alcanza a cerrarse).
+const STREAMLINE_PAUSA_MIN = 20;     // minimum pause between reappearances
+const STREAMLINE_PAUSA_MAX = 60;     // maximum pause between reappearances
+// Guards against orbits around sinks: the trajectory stops if the direction
+// reverses abruptly or the SIGNED accumulated turning exceeds ~0.85 turns
+// (S-curves cancel out; a circle never manages to close).
 const STREAMLINE_REVERSA_COS = -0.6;
 const STREAMLINE_GIRO_MAX = 1.7 * Math.PI;
-// En móvil se siembra menos flujo. El precálculo de trayectorias es síncrono
-// (hasta 100 pasos por semilla en el hilo principal) y la geometría del
-// TripsLayer es lo que revienta en equipos de gama baja.
+// Less flow is seeded on mobile. The trajectory precomputation is synchronous
+// (up to 100 steps per seed on the main thread) and the TripsLayer geometry
+// is what crashes low-end devices.
 const CANTIDAD_PARTICULAS_MOVIL = 1500;
-// Peso mínimo para que un hexágono aporte flujo o color (bajo esto la partícula
-// sería invisible). Debe coincidir con el umbral usado en CalcularParticulas.js.
+// Minimum weight for a hexagon to contribute flow or color (below this the
+// particle would be invisible). It must match the threshold used in
+// CalcularParticulas.js.
 const PESO_MINIMO_VISIBLE = 10;
 
-// Split map: capas de contexto (independientes de la hora) que se dibujan en
-// AMBAS vistas. Las capas dependientes de la hora usan sufijo '-der' para la
-// hora B y se enrutan a su vista; ver filtrarCapaPorVista.
+// Split map: context layers (independent of the hour) drawn in BOTH views.
+// Hour-dependent layers use the '-der' suffix for hour B and are routed to
+// their view; see filtrarCapaPorVista.
 const CAPAS_CONTEXTO_COMPARACION = new Set([
   'red-buses', 'trazado-metro', 'estaciones-metro', 'etiquetas-metro',
 ]);
 
-// ¿El punto está dentro del polígono? (ray casting). Para sembrar dentro del hex.
+// Is the point inside the polygon? (ray casting). To seed inside the hex.
 function puntoEnPoligono(punto, polygon) {
   let dentro = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -302,8 +305,8 @@ function puntoEnPoligono(punto, polygon) {
   return dentro;
 }
 
-// Un punto aleatorio dentro de la celda (dispersa las semillas de una misma
-// celda). Los vértices se obtienen de H3 (cellToBoundary); no se guardan.
+// A random point inside the cell (spreads the seeds of one cell). The
+// vertices come from H3 (cellToBoundary); they are not stored.
 function muestrearEnHex(hexagon) {
   const vs = h3.cellToBoundary(hexagon.h3).map(([lat, lon]) => [lon, lat]);
   let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
@@ -321,16 +324,16 @@ function muestrearEnHex(hexagon) {
   return hexagon.c;
 }
 
-// id local de la celda H3 que contiene (lon, lat), vía h3-js y el mapa h3ToId.
-// Devuelve -1 fuera de la grilla.
+// Local id of the H3 cell containing (lon, lat), via h3-js and the h3ToId
+// map. Returns -1 outside the grid.
 function posicionAHexId(lon, lat, g) {
   const celda = h3.latLngToCell(lat, lon, g.resolucion);
   const id = g.h3ToId[celda];
   return id === undefined ? -1 : id;
 }
 
-// Magnitud mediana del campo entre las celdas activas: referencia para la
-// velocidad de animación relativa de las estelas.
+// Median field magnitude over the active cells: reference for the relative
+// animation speed of the trails.
 function magnitudMediana(vectores, pesos) {
   const mags = [];
   for (let i = 0; i < vectores.length; i++) {
@@ -343,9 +346,9 @@ function magnitudMediana(vectores, pesos) {
   return mags[mags.length >> 1];
 }
 
-// Vector del campo en un punto, interpolado por distancia inversa entre los
-// centros de la celda que contiene el punto y sus vecinas H3 (precalculadas en
-// la grilla). Suaviza las transiciones de dirección entre celdas.
+// Field vector at a point, interpolated by inverse distance between the
+// centers of the cell containing the point and its H3 neighbors (precomputed
+// in the grid). It smooths the direction transitions between cells.
 function vectorEnPunto(lon, lat, vectores, g) {
   const celda = h3.latLngToCell(lat, lon, g.resolucion);
   const id = g.h3ToId[celda];
@@ -368,11 +371,11 @@ function vectorEnPunto(lon, lat, vectores, g) {
   return [sx / sw, sy / sw];
 }
 
-// Advecta una semilla por el campo interpolado y devuelve la polilínea junto
-// a los tiempos de paso: dt inversamente proporcional a la magnitud local
-// (relativa a la mediana), acotado para evitar estelas estancadas o fugaces.
-// Se detiene al salir de la grilla, al llegar a una celda sin flujo, o al
-// caer en un sumidero (reversa brusca o giro acumulado excesivo).
+// Advects a seed through the interpolated field and returns the polyline
+// with its step times: dt inversely proportional to the local magnitude
+// (relative to the median), clamped to avoid stalled or fleeting trails. It
+// stops when leaving the grid, reaching a cell without flow, or falling into
+// a sink (abrupt reversal or excessive accumulated turning).
 function calcularStreamline(semilla, vectores, g, magRef) {
   const path = [semilla];
   const tiempos = [0];
@@ -404,16 +407,16 @@ function calcularStreamline(semilla, vectores, g, magRef) {
   return { path, tiempos };
 }
 
-// --- Streamlets sobre recorridos (experimental) -------------------------------
-// En vez de advectar libremente por el campo interpolado, la estela de bus
-// sigue la geometria del recorrido mas cercano a su semilla; el campo aporta
-// el sentido de avance y la velocidad. Se activa en Config o con ?rutas=1.
+// --- Streamlets over bus routes (experimental) ---------------------------------
+// Instead of advecting freely through the interpolated field, the bus trail
+// follows the geometry of the route closest to its seed; the field provides
+// the travel direction and the speed. Enabled in Config or with ?rutas=1.
 const COS_LAT_GRILLA = Math.cos(((hexGridData.minLat + hexGridData.maxLat) / 2) * Math.PI / 180);
 
-// Indice hexagono -> recorridos de bus que lo cruzan (muestreo de las
-// polilineas a ~1 paso de streamline). Se construye una sola vez.
+// Index hexagon -> bus routes crossing it (polylines sampled at ~1 streamline
+// step). Built only once.
 function construirIndiceRutas(g) {
-  // Objeto plano (no Map nativo: el componente Map de react-map-gl lo tapa).
+  // Plain object (not a native Map: the react-map-gl Map component shadows it).
   const indice = Object.create(null);
   RECORRIDOS_BUSES.forEach((camino, r) => {
     for (let seg = 0; seg < camino.length - 1; seg++) {
@@ -436,8 +439,8 @@ function construirIndiceRutas(g) {
   return indice;
 }
 
-// Avanza una posicion (seg, f) una distancia dada a lo largo del recorrido,
-// en el sentido indicado. Devuelve la posicion nueva y si se acabo el camino.
+// Advances a position (seg, f) a given distance along the route, in the
+// indicated direction. Returns the new position and whether the path ended.
 function avanzarEnRecorrido(camino, seg, f, sentido, distancia) {
   let restante = distancia;
   while (restante > 0) {
@@ -469,9 +472,9 @@ function puntoEnRecorrido(camino, seg, f) {
   return [lon1 + (lon2 - lon1) * f, lat1 + (lat2 - lat1) * f];
 }
 
-// Estela que sigue un recorrido de bus: el sentido inicial lo decide el campo
-// en la semilla, la velocidad sigue la magnitud local, y la estela termina si
-// el flujo local se opone claramente al sentido de avance.
+// Trail that follows a bus route: the initial direction is decided by the
+// field at the seed, the speed follows the local magnitude, and the trail
+// ends if the local flow clearly opposes the travel direction.
 function calcularStreamlineRuta(entrada, vectores, g, magRef) {
   const camino = RECORRIDOS_BUSES[entrada.r];
   let seg = entrada.seg, f = entrada.f;
@@ -510,39 +513,39 @@ function calcularStreamlineRuta(entrada, vectores, g, magRef) {
   return { path, tiempos };
 }
 
-// Trayectorias de un modo (buses/metro) para la hora dada, sembrando en los hexágonos
-// precalculados. Cada trayectoria lleva timestamps (con desfase aleatorio para escalonar
-// el flujo), color por peso y ancho ~sqrt(peso).
+// Trajectories of one mode (buses/metro) for the given hour, seeded on the
+// precomputed hexagons. Each trajectory carries timestamps (with a random
+// offset to stagger the flow), color by weight, and width ~sqrt(weight).
 function construirStreamlinesModo(tipo, cantidad, vectores, pesos, colorStops, hora, hexagonos, g, indiceRutas) {
   const seeds = particulasPrecalculadas.particulas[tipo] || [];
   const n = Math.min(cantidad, seeds.length);
   const magRef = magnitudMediana(vectores, pesos);
   const salida = [];
   for (let i = 0; i < n; i++) {
-    // Submuestreo espaciado, no las primeras n: las semillas están ordenadas por
-    // celda (índice H3 ordenado, agrupado espacialmente), así que las primeras n
-    // se concentrarían en una zona. El paso las reparte por toda la ciudad y
-    // conserva la densidad proporcional a la demanda. Con n = total es identidad.
+    // Strided subsampling, not the first n: the seeds are ordered by cell
+    // (sorted H3 index, spatially grouped), so the first n would concentrate
+    // in one zone. The stride spreads them across the whole city and keeps
+    // the density proportional to demand. With n = total it is the identity.
     const hexId = seeds[Math.floor((i * seeds.length) / n)].hexIdIniciales[hora];
     const hex = hexagonos[hexId];
     if (!hex) continue;
     const peso = pesos[hexId] || 0;
-    if (peso < PESO_MINIMO_VISIBLE) continue;   // pesos chicos: partícula invisible
-    // Con el indice de rutas activo, la estela sigue un recorrido real que
-    // cruza el hexagono semilla; si ninguno lo cruza, advecta por el campo.
+    if (peso < PESO_MINIMO_VISIBLE) continue;   // small weights: invisible particle
+    // With the route index active, the trail follows a real route crossing
+    // the seed hexagon; if none crosses it, it advects through the field.
     const candidatos = indiceRutas ? indiceRutas[hexId] : null;
     const { path, tiempos } = (candidatos && candidatos.length > 0)
       ? calcularStreamlineRuta(candidatos[Math.floor(Math.random() * candidatos.length)], vectores, g, magRef)
       : calcularStreamline(muestrearEnHex(hex), vectores, g, magRef);
     if (path.length < 2) continue;
     const color = interpolarColorStops(peso, colorStops);
-    // Divisor por modo: los pesos de bus son mucho menores que los de Metro
-    // y con un divisor común quedaban clavados en el ancho mínimo.
+    // Per-mode divisor: bus weights are much smaller than Metro's, and with
+    // a shared divisor they were stuck at the minimum width.
     const width = 0.4 + Math.sqrt(peso) / (tipo === 'metro' ? 3 : 1.2);
-    // Respawn continuo: la estela reaparece cada duración + pausa aleatoria,
-    // con fase inicial uniforme. Las apariciones cuya ventana cruza el final
-    // del ciclo se duplican desfasadas en -LOOP, para que al dar la vuelta el
-    // reloj la estela continúe donde iba en vez de cortarse.
+    // Continuous respawn: the trail reappears every duration + random pause,
+    // with a uniform initial phase. Appearances whose window crosses the end
+    // of the cycle are duplicated offset by -LOOP, so when the clock wraps
+    // the trail continues where it was instead of being cut.
     const duracion = tiempos[tiempos.length - 1] + STREAMLINE_ESTELA;
     const pausa = STREAMLINE_PAUSA_MIN +
       Math.random() * (STREAMLINE_PAUSA_MAX - STREAMLINE_PAUSA_MIN);
@@ -559,11 +562,11 @@ function construirStreamlinesModo(tipo, cantidad, vectores, pesos, colorStops, h
 }
 
 
-// --- Mini markdown para el popup "Acerca de" ---------------------------------
-// El contenido vive en public/acerca-de.md (editable sin recompilar, tambien
-// en el sitio ya publicado). Subconjunto soportado: titulo (# ), parrafos,
-// listas (- ), **negrita** y [enlaces](url). Se construyen elementos de React,
-// sin HTML inyectado.
+// --- Mini markdown for the "Acerca de" popup -----------------------------------
+// The content lives in public/acerca-de.md (editable without rebuilding, also
+// on the published site). Supported subset: title (# ), paragraphs, lists
+// (- ), **bold**, and [links](url). React elements are built, with no
+// injected HTML.
 function renderizarInline(texto) {
   const partes = texto.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
   return partes.map((parte, i) => {
@@ -584,7 +587,7 @@ function renderizarInline(texto) {
 function MarkdownMini({ texto }) {
   const bloques = texto.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   return bloques.map((bloque, i) => {
-    if (bloque.startsWith('# ')) return null; // el titulo lo muestra el encabezado
+    if (bloque.startsWith('# ')) return null; // the header already shows the title
     const lineas = bloque.split('\n');
     if (lineas.every((l) => l.startsWith('- '))) {
       return (
@@ -606,8 +609,8 @@ function App() {
 
   const [selectorMapaAbierto, setSelectorMapaAbierto] = useState(false);
   const [mostrarPanelConfiguraciones, setMostrarPanelConfiguraciones] = useState(paramBool('panel', false));
-  // Layout compacto en pantallas angostas: el mapa manda, la caja de tiempo
-  // baja como barra inferior y capas/estilo/acerca se pliegan dentro de Config.
+  // Compact layout on narrow screens: the map rules, the time box drops to a
+  // bottom bar, and layers/style/about fold into Config.
   const [esMovil, setEsMovil] = useState(
     window.matchMedia(CONSULTA_MOVIL).matches);
   useEffect(() => {
@@ -617,8 +620,8 @@ function App() {
     return () => mq.removeEventListener('change', alCambiar);
   }, []);
 
-  // Popup de información del sistema y créditos (?creditos=1 lo abre de entrada).
-  // El texto se carga de public/acerca-de.md la primera vez que se abre.
+  // System info and credits popup (?creditos=1 opens it right away).
+  // The text is loaded from public/acerca-de.md the first time it opens.
   const [mostrarInfo, setMostrarInfo] = useState(paramBool('creditos', false));
   const [textoAcerca, setTextoAcerca] = useState(null);
   useEffect(() => {
@@ -633,35 +636,35 @@ function App() {
 
 
 
-  //Valores que dependen de la configuracion inicial de vista (la URL puede
-  //fijar una cámara exacta para capturas y enlaces).
+  // Values that depend on the initial view configuration (the URL can fix an
+  // exact camera for captures and links).
   const vistaBase = valoresVisualizacion.GranSantiago.Vista;
   const vistaMapa = {
     ...vistaBase,
     latitude: paramNum('lat', vistaBase.latitude),
     longitude: paramNum('lon', vistaBase.longitude),
-    // En móvil se aleja un nivel para que la ciudad entre completa en la pantalla angosta.
+    // On mobile it zooms out one level so the whole city fits the narrow screen.
     zoom: paramNum('zoom', vistaBase.zoom - (esMovil ? 1 : 0)),
   };
   const [viewState, setViewState] = useState(vistaMapa);
-  const [zoomLevel, setZoomLevel] = useState(1); // 1=lejano, 2=medio, 3=cercano
+  const [zoomLevel, setZoomLevel] = useState(1); // 1=far, 2=medium, 3=near
   const [datosVersion, setDatosVersion] = useState(0);
   const [cantidadParticulas, setCantidadParticulas] = useState(
     esMovil
       ? Math.min(CANTIDAD_PARTICULAS_MOVIL, particulasPrecalculadas.cantidadParticulas)
       : particulasPrecalculadas.cantidadParticulas);
-  // Intervalo de la animación de partículas (ms). Mayor = menos trabajo por segundo = menos CPU.
+  // Particle animation interval (ms). Higher = less work per second = less CPU.
   const [intervaloActualizacion, setIntervaloActualizacion] = useState(valoresVisualizacion.GranSantiago.tiempoActualizacion);
-  // Pestaña visible: se usa para detener la animación cuando el usuario cambia de pestaña.
+  // Visible tab: used to stop the animation when the user switches tabs.
   const [pestanaVisible, setPestanaVisible] = useState(true);
   const [horaSeleccionada, setHoraSeleccionada] = useState(8);
   const [datosError, setDatosError] = useState(null);
   const [cargandoDatos, setCargandoDatos] = useState(false);
 
   const horaSeleccionadaRef = useRef(horaSeleccionada);
-  const [horaVisual, setHoraVisual] = useState(8); // Para mostrar en UI
+  const [horaVisual, setHoraVisual] = useState(8); // Shown in the UI
 
-  // Modo de transporte visible (total, buses o metro)
+  // Visible transport mode (total, buses, or metro)
   const [modo, setModo] = useState(PARAMS_URL.get('modo') || 'total');
 
   const actualizarHora = useCallback((nuevaHora) => {
@@ -671,13 +674,13 @@ function App() {
 
  
 
-  // UseEffect para cerrar el panel al hacer clic fuera
+  // Effect to close the panel on an outside click
   useEffect(() => {
     const manejarClicExterno = (evento) => {
       const esClicEnBotonConfiguracion = evento.target.closest('.boton-configuracion');
       const esClicEnPanelConfiguracion = evento.target.closest('.panel-configuraciones');
       
-      // Cerrar panel de configuraciones solo si el clic fue fuera de él
+      // Close the settings panel only if the click was outside it
       if (mostrarPanelConfiguraciones && !esClicEnBotonConfiguracion && !esClicEnPanelConfiguracion) {
         setMostrarPanelConfiguraciones(false);
       }
@@ -687,7 +690,7 @@ function App() {
     return () => document.removeEventListener('pointerdown', manejarClicExterno);
   }, [mostrarPanelConfiguraciones]);
 
-  // Detecta si la pestaña está visible para pausar la animación cuando no se está mirando.
+  // Detects tab visibility to pause the animation when nobody is watching.
   useEffect(() => {
     const manejarVisibilidad = () => setPestanaVisible(!document.hidden);
     document.addEventListener('visibilitychange', manejarVisibilidad);
@@ -700,33 +703,32 @@ function App() {
     : PARAMS_URL.get('estilo') === 'claro' ? EstiloMapaClaro
     : EstiloMapaOscuro);
   const [mostrarParticulas, setMostrarParticulas] = useState(paramBool('particulas', true));
-  // Toggle propio del flujo: anima (mueve) las partículas. Independiente del avance de horas.
+  // Flow-specific toggle: animates (moves) the particles. Independent of the hour changes.
   const [animarParticulas, setAnimarParticulas] = useState(paramBool('animar', true));
-  // El heatmap es la capa más pesada en GPU de gama baja: apagado por omisión en
-  // móvil (el toggle o ?heatmap=1 lo reactivan).
+  // The heatmap is the heaviest layer on low-end GPUs: off by default on
+  // mobile (the toggle or ?heatmap=1 re-enables it).
   const [mostrarHeatmap, setMostrarHeatmap] = useState(paramBool('heatmap', !esMovil));
   const [nivelHeatmap, setNivelHeatmap] = useState(paramNum('nivelheatmap', NIVEL_HEATMAP_INICIAL));
   const [mostrarHexagonos, setMostrarHexagonos] = useState(paramBool('hexagonos', false));
-  // Trazado de metro y etiquetas de nombres son toggles independientes.
+  // The Metro trace and the name labels are independent toggles.
   const [mostrarTrazadoMetro, setMostrarTrazadoMetro] = useState(paramBool('trazado', true));
   const [mostrarNombresMetro, setMostrarNombresMetro] = useState(paramBool('nombres', true));
-  // Estructura física de la red de buses (capa de contexto).
+  // Physical structure of the bus network (context layer).
   const [mostrarRedBuses, setMostrarRedBuses] = useState(paramBool('redbuses', false));
-  // Visibilidad de las capas extra (ver capasExtra.js), según su porDefecto.
+  // Visibility of the extra layers (see capasExtra.js), per their porDefecto.
   const [capasExtraVisibles, setCapasExtraVisibles] = useState(
     () => Object.fromEntries(CAPAS_EXTRA.map((c) => [c.id, c.porDefecto])));
 
-  // Comparación de dos franjas horarias (split map). La vista se parte en dos
-  // MapView con cámara enlazada: izquierda la hora principal, derecha horaComparacion.
-  // El basemap se omite en este modo; la referencia espacial es la red de buses y
-  // el trazado de Metro. Las capas dependientes de la hora se duplican con sufijo
-  // '-der' y se enrutan por vista (ver filtrarCapaPorVista y las vistas del render).
+  // Comparison of two hour slots (split map). The view splits into two
+  // MapViews with a linked camera: left the main hour, right horaComparacion.
+  // Hour-dependent layers are duplicated with the '-der' suffix and routed by
+  // view (see filtrarCapaPorVista and the views in the render).
   const [comparar, setComparar] = useState(paramBool('comparar', false));
   const [horaComparacion, setHoraComparacion] = useState(clampHora(paramNum('horab', 18)));
-  // Valor pendiente del slider derecho: se aplica (carga datosB) al soltar.
+  // Pending value of the right slider: applied (loads datosB) on release.
   const [horaComparacionVisual, setHoraComparacionVisual] = useState(clampHora(paramNum('horab', 18)));
   const [datosB, setDatosB] = useState(null);
-  // Carga los datos de la hora B mientras la comparación está activa.
+  // Loads the hour-B data while the comparison is active.
   useEffect(() => {
     if (!comparar) return;
     let vivo = true;
@@ -745,18 +747,17 @@ function App() {
     });
     return () => { vivo = false; setCargandoDatos(false); };
   }, [comparar, horaComparacion]);
-  // En móvil no se compara: si se llega en modo comparación (URL o resize desde
-  // escritorio), se vuelve a vista única.
+  // No comparison on mobile: arriving in comparison mode (URL or a resize
+  // from desktop) falls back to the single view.
   useEffect(() => {
     if (esMovil && comparar) setComparar(false);
   }, [esMovil, comparar]);
 
   //
-  // Datos para modos: bus, metro o combinado. 
+  // Data for the modes: bus, metro, or combined.
   //
-  // Se inicializan vacías; la hora inicial se carga de forma diferida al montar
-  // (aplicarInicial), como cualquier cambio de hora. Así ninguna matriz por hora
-  // se empaqueta en el bundle.
+  // Initialized empty; the initial hour loads lazily on mount
+  // (aplicarInicial), like any hour change. No per-hour matrix is bundled.
   const cargaTotalBusesRef = useRef(0);
   const cargaTotalMetroRef = useRef(0);
   const cargaTotalRef = useRef(0);
@@ -765,18 +766,18 @@ function App() {
   const matrizVectoresMetroRef = useRef([]);
   const matrizPesosMetroRef = useRef([]);
   
-  // Estado para controlar visualización de vectores
+  // State that controls the vector display
   const [mostrarVectoresBuses, setMostrarVectoresBuses] = useState(false);
   const [mostrarVectoresMetro, setMostrarVectoresMetro] = useState(false);
-  // Factor de escala del largo de los vectores. Las magnitudes son ~0.001, así que
-  // sin amplificar las flechas quedan sub-pixel. El usuario lo ajusta con un slider.
+  // Scale factor of the vector length. Magnitudes are ~0.001, so without
+  // amplification the arrows are sub-pixel. The user adjusts it with a slider.
   const [escalaVectores, setEscalaVectores] = useState(paramNum('vectescala', 4));
 
-  // La generación de partículas por frame se reemplazó por streamlines precalculadas
-  // + TripsLayer (ver helpers de módulo arriba y la capa de flujo más abajo).
+  // Per-frame particle generation was replaced by precomputed streamlines
+  // plus TripsLayer (see the module helpers above and the flow layer below).
 
 
-  // Función para aplicar parámetros
+  // Applies the pending parameters
   const aplicarParametros = async (horaAAplicar = horaVisual) => {
     setCargandoDatos(true);
     try {
@@ -784,32 +785,32 @@ function App() {
 
       const formattedHour = horaAAplicar.toString().padStart(2, '0') + ':00';
 
-      // Cargar nuevos datos (solo con hora)
+      // Load the new data (hour only)
       const resultado = await cargarDatos(formattedHour);
 
       if (resultado.status === 'error') {
         setDatosError(resultado.message);
-        setHoraVisual(horaSeleccionada); // la etiqueta vuelve a la hora ya cargada
+        setHoraVisual(horaSeleccionada); // the label returns to the hour already loaded
         return;
       }
 
-      // Actualizar referencias
+      // Update the references
       matrizVectoresBusesRef.current = resultado.MatrizVectoresBuses;
       matrizPesosBusesRef.current = resultado.MatrizPesosBuses.MatrizPesos;
       matrizVectoresMetroRef.current = resultado.MatrizVectoresMetro;
       matrizPesosMetroRef.current = resultado.MatrizPesosMetro.MatrizPesos;
 
-      // Actualizar cargas totales
+      // Update the total loads
       cargaTotalBusesRef.current = resultado.MatrizPesosBuses.CargaTotal;
       cargaTotalMetroRef.current = resultado.MatrizPesosMetro.CargaTotal;
       cargaTotalRef.current = resultado.MatrizPesosBuses.CargaTotal + resultado.MatrizPesosMetro.CargaTotal;
 
-      // Actualizar hora y forzar el recálculo de las capas por hora
+      // Update the hour and force the per-hour layers to recompute
       actualizarHora(horaAAplicar);
       setDatosVersion(v => v + 1);
 
     } catch (error) {
-      console.error("Error al aplicar parámetros:", error);
+      console.error("Error applying parameters:", error);
       setDatosError("Error inesperado al cargar los datos");
       setHoraVisual(horaSeleccionada);
     } finally {
@@ -817,8 +818,8 @@ function App() {
     }
   };
 
-  // Comparación de dos horas (split map): tarea directa, se activa desde la barra
-  // de tiempo. Al entrar, ambos sliders arrancan en las horas ya cargadas.
+  // Two-hour comparison (split map): direct task, entered from the time bar.
+  // On entry, both sliders start at the hours already loaded.
   const entrarComparacion = () => {
     setHoraVisual(horaSeleccionada);
     setHoraComparacionVisual(horaComparacion);
@@ -829,7 +830,7 @@ function App() {
     setHoraVisual(horaSeleccionada);
   };
 
-  // Hora inicial: la URL tiene precedencia sobre lo guardado en localStorage.
+  // Initial hour: the URL takes precedence over the localStorage value.
   useEffect(() => {
     const savedHora = localStorage.getItem("horaSeleccionada");
     let horaInicial;
@@ -855,8 +856,8 @@ function App() {
         cargaTotalBusesRef.current = resultado.MatrizPesosBuses.CargaTotal;
         cargaTotalMetroRef.current = resultado.MatrizPesosMetro.CargaTotal;
         cargaTotalRef.current = resultado.MatrizPesosBuses.CargaTotal + resultado.MatrizPesosMetro.CargaTotal;
-        // Los datos de vectores se memoizan por datosVersion; hay que avisar el cambio
-        // de refs para que se recalculen con la hora efectivamente cargada.
+        // Vector data memoizes by datosVersion; the ref change must be
+        // signaled so they recompute with the hour actually loaded.
         setDatosVersion(v => v + 1);
       } else {
         setDatosError(resultado.message);
@@ -869,40 +870,40 @@ function App() {
 
 
 
- // Paleta para buses: viridis (perceptualmente uniforme), azul-teal -> verde -> amarillo
-  // Cortes calibrados a pesos por día laboral promedio (máximo ~1030 por
-  // hexágono en hora punta): así los buses recorren la paleta completa.
+ // Bus palette: viridis (perceptually uniform), blue-teal -> green -> yellow.
+  // Stops calibrated to average-working-day weights (maximum ~1030 per
+  // hexagon at the peak hour): buses then span the full palette.
   const colorStopsBuses = [
-    { limite: 10, color: [59, 82, 139], opacity: 0.7 },    // Azul-púrpura
+    { limite: 10, color: [59, 82, 139], opacity: 0.7 },    // Blue-purple
     { limite: 150, color: [33, 144, 141], opacity: 0.8 },  // Teal
-    { limite: 450, color: [92, 200, 99], opacity: 0.9 },   // Verde
-    { limite: 1000, color: [253, 231, 37], opacity: 1.0 }  // Amarillo
+    { limite: 450, color: [92, 200, 99], opacity: 0.9 },   // Green
+    { limite: 1000, color: [253, 231, 37], opacity: 1.0 }  // Yellow
   ];
 
-  // Paleta para metro: magma (perceptualmente uniforme), púrpura -> magenta -> naranja
+  // Metro palette: magma (perceptually uniform), purple -> magenta -> orange
   const colorStopsMetro = [
-    { limite: 10, color: [81, 18, 124], opacity: 0.7 },     // Púrpura
+    { limite: 10, color: [81, 18, 124], opacity: 0.7 },     // Purple
     { limite: 1000, color: [183, 55, 121], opacity: 0.8 },  // Magenta
-    { limite: 10000, color: [240, 96, 93], opacity: 0.9 },  // Rojo-naranja
-    { limite: 30000, color: [254, 176, 120], opacity: 1.0 } // Naranja claro
+    { limite: 10000, color: [240, 96, 93], opacity: 0.9 },  // Red-orange
+    { limite: 30000, color: [254, 176, 120], opacity: 1.0 } // Light orange
   ];
 
 
-  // Velocidades por nivel de zoom (más lento al acercarse)
+  // Speeds per zoom level (slower when zooming in)
   const velocidadesPorNivel = {
-    1: 0.001,   // Velocidad original
+    1: 0.001,   // Original speed
     2: 0.0005,  // 
     3: 0.0002   // 
   };
   
-  // Reloj de animación de las streamlines. Un requestAnimationFrame avanza este valor;
-  // TripsLayer lo usa como currentTime (un uniform en la GPU). Así la animación NO pasa
-  // por el estado de React frame a frame reconstruyendo geometría.
+  // Streamline animation clock. A requestAnimationFrame advances this value;
+  // TripsLayer uses it as currentTime (a GPU uniform). The animation thus does
+  // NOT go through React state rebuilding geometry frame by frame.
   const [tiempoAnim, setTiempoAnim] = useState(STREAMLINE_MAX_PASOS);
   const tiempoAnimRef = useRef(STREAMLINE_MAX_PASOS);
 
-  // Grilla H3 para el mapeo posición -> celda (referencia estable): resolución,
-  // el mapa índice H3 -> id local y los centros/vecinos por celda.
+  // H3 grid for the position -> cell mapping (stable reference): resolution,
+  // the H3 index -> local id map, and the centers/neighbors per cell.
   const paramsGrilla = useMemo(
     () => ({
       resolucion: hexGridData.resolucion,
@@ -912,13 +913,13 @@ function App() {
     [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Streamlets sobre recorridos reales de bus (experimental). El índice
-  // hexágono -> recorridos se construye una sola vez.
+  // Streamlets over real bus routes (experimental). The hexagon -> routes
+  // index is built only once.
   const [streamletsPorRuta, setStreamletsPorRuta] = useState(paramBool('rutas', false));
   const indiceRutas = useMemo(() => construirIndiceRutas(paramsGrilla), [paramsGrilla]);
 
-  // Trayectorias del flujo, precalculadas una vez por hora/modo/cantidad. Referencia
-  // estable entre frames: TripsLayer no recomputa geometría al animar.
+  // Flow trajectories, precomputed once per hour/mode/count. Stable reference
+  // across frames: TripsLayer does not recompute geometry while animating.
   const streamlines = useMemo(() => {
     const hora = horaSeleccionadaRef.current;
     const construir = (tipo) => construirStreamlinesModo(
@@ -932,8 +933,8 @@ function App() {
     return modo === 'total' ? [...construir('buses'), ...construir('metro')] : construir(modo);
   }, [datosVersion, modo, cantidadParticulas, paramsGrilla, streamletsPorRuta, indiceRutas]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Trayectorias de la hora B (split map). Mismo cálculo que la hora A, pero desde
-  // datosB y la hora de comparación. Comparten el reloj de animación (tiempoAnim).
+  // Hour-B trajectories (split map). Same computation as hour A, but from
+  // datosB and the comparison hour. They share the animation clock (tiempoAnim).
   const streamlinesB = useMemo(() => {
     if (!comparar || !datosB) return [];
     const construir = (tipo) => construirStreamlinesModo(
@@ -947,9 +948,10 @@ function App() {
     return modo === 'total' ? [...construir('buses'), ...construir('metro')] : construir(modo);
   }, [comparar, datosB, horaComparacion, modo, cantidadParticulas, paramsGrilla, streamletsPorRuta, indiceRutas]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Bucle de animación: avanza el reloj mientras las partículas están visibles, el toggle
-  // de animación está activo y la pestaña visible. La velocidad depende del intervalo base y
-  // se atenúa al acercar el zoom. Al pausar, el reloj queda quieto y las estelas se congelan.
+  // Animation loop: advances the clock while the particles are visible, the
+  // animation toggle is on, and the tab is visible. The speed depends on the
+  // base interval and softens when zooming in. When paused, the clock stays
+  // still and the trails freeze.
   useEffect(() => {
     if (!mostrarParticulas || !animarParticulas || !pestanaVisible) return;
     const pasosPorSeg = 1000 / intervaloActualizacion;
@@ -967,10 +969,10 @@ function App() {
     return () => cancelAnimationFrame(raf);
   }, [mostrarParticulas, animarParticulas, pestanaVisible, intervaloActualizacion, zoomLevel]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Capa de flujo: streamlets animados en la GPU (TripsLayer). currentTime cicla en
-  // [0, STREAMLINE_LOOP); trailLength fija el largo visible de cada estela.
-  // Props compartidas entre la capa de flujo de la hora A y la de la hora B
-  // (split map): así ambas estelas usan el mismo reloj y el mismo estilo.
+  // Flow layer: GPU-animated streamlets (TripsLayer). currentTime cycles in
+  // [0, STREAMLINE_LOOP); trailLength sets the visible length of each trail.
+  // Props shared between the hour-A and hour-B flow layers (split map): both
+  // sets of trails use the same clock and the same style.
   const propsCapaFlujo = {
     getPath: d => d.path,
     getTimestamps: d => d.timestamps,
@@ -1000,10 +1002,10 @@ function App() {
   });
 
   
-  // Datos de las capas de vectores, memoizados: solo se reconstruyen cuando cambian
-  // los datos de la hora (datosVersion) o la escala, NO en cada frame de partículas.
-  // Así deck.gl recibe una referencia de `data` estable y no re-sube la geometría a
-  // la GPU en cada render.
+  // Vector layer data, memoized: rebuilt only when the hour data
+  // (datosVersion) or the scale changes, NOT on every particle frame. deck.gl
+  // then receives a stable `data` reference and does not re-upload the
+  // geometry to the GPU on every render.
   const datosVectoresBuses = useMemo(
     () => construirDatosVectores(matrizVectoresBusesRef.current, matrizPesosBusesRef.current,
       hexagonosData, colorStopsBuses, escalaVectores),
@@ -1014,7 +1016,7 @@ function App() {
       hexagonosData, colorStopsMetro, escalaVectores),
     [datosVersion, escalaVectores] // eslint-disable-line react-hooks/exhaustive-deps
   );
-  // Vectores de la hora B (split map).
+  // Hour-B vectors (split map).
   const datosVectoresBusesB = useMemo(
     () => (comparar && datosB)
       ? construirDatosVectores(datosB.vectoresBuses, datosB.pesosBuses, hexagonosData, colorStopsBuses, escalaVectores)
@@ -1028,15 +1030,15 @@ function App() {
     [comparar, datosB, escalaVectores] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Props compartidas de las capas de vectores (hora A y hora B).
+  // Shared props of the vector layers (hour A and hour B).
   const propsVectores = {
     getPath: d => d.path,
-    getColor: d => d.color, // Color según los datos
+    getColor: d => d.color, // Color from the data
     getWidth: 2,
     widthUnits: 'pixels',
     widthMinPixels: 1.5,
   };
-  // Función que dibuja los vectores promedio de los buses, para cada celda
+  // Layer that draws the mean bus vectors, per cell
   const vectorLayerBuses  = mostrarVectoresBuses && new PathLayer({
     id: 'vector-layer-buses', data: datosVectoresBuses, ...propsVectores
   });
@@ -1046,7 +1048,7 @@ function App() {
 
 
 
-  // Función que dibuja los vectores promedio del metro, para cada celda
+  // Layer that draws the mean Metro vectors, per cell
   const vectorLayerMetro  = mostrarVectoresMetro && new PathLayer({
     id: 'vector-layer-metro', data: datosVectoresMetro, ...propsVectores
   });
@@ -1055,8 +1057,8 @@ function App() {
   });
 
 
-  // Capa de diagnóstico de la grilla (apagada por defecto). Los vértices se
-  // calculan con cellToBoundary solo cuando se activa, así no se guardan.
+  // Grid diagnostic layer (off by default). Vertices are computed with
+  // cellToBoundary only when enabled, so they are not stored.
   const datosHexagonos = useMemo(
     () => mostrarHexagonos
       ? hexagonosData.map((hex) => h3.cellToBoundary(hex.h3).map(([lat, lon]) => [lon, lat]))
@@ -1067,18 +1069,18 @@ function App() {
     id: 'hex-grid-layer',
     data: datosHexagonos,
     getPolygon: d => d,
-    getFillColor: [0, 0, 0, 0], // Relleno transparente
-    getLineColor: [100, 150, 255, 150], // Color de línea azul
+    getFillColor: [0, 0, 0, 0], // Transparent fill
+    getLineColor: [100, 150, 255, 150], // Blue line color
     getLineWidth: 1,
     lineWidthMinPixels: 1,
     pickable: false,
   });
 
 
-  // Trazado esquemático de las líneas de metro, con su color oficial. Es la
-  // estructura de la red, independiente de las etiquetas de nombres y del flujo.
-  // LINEAS_METRO es constante: el arreglo se arma una vez y la capa recibe una
-  // referencia estable en vez de reconstruirlo en cada frame de animación.
+  // Schematic trace of the Metro lines, each in its official color. It is the
+  // network structure, independent of the name labels and the flow.
+  // LINEAS_METRO is constant: the array is built once and the layer receives
+  // a stable reference instead of rebuilding it on every animation frame.
   const datosTrazadoMetro = useMemo(
     () => LINEAS_METRO.flatMap(l => l.polilineas.map(path => ({ path, color: l.color }))),
     []
@@ -1088,8 +1090,9 @@ function App() {
     data: datosTrazadoMetro,
     getPath: d => d.path,
     getColor: d => d.color,
-    // Ancho en metros con topes en píxeles: el trazado escala con el zoom
-    // (como los streamlets) en vez de quedar fijo y verse delgado al acercar.
+    // Width in meters with pixel bounds: the trace scales with the zoom
+    // (like the streamlets) instead of staying fixed and looking thin when
+    // zooming in.
     getWidth: 45,
     widthUnits: 'meters',
     widthMinPixels: 2,
@@ -1099,14 +1102,14 @@ function App() {
     parameters: { depthTest: false },
   });
 
-  // Marcadores de estación sobre el trazado: círculo blanco con contorno oscuro,
-  // como en los mapas de transporte. Van con el mismo toggle del trazado de metro.
+  // Station markers over the trace: white circle with a dark outline, as in
+  // transit maps. They share the Metro trace toggle.
   const estacionesMetroLayer = mostrarTrazadoMetro && new ScatterplotLayer({
     id: 'estaciones-metro',
     data: ESTACIONES_METRO,
     getPosition: d => [d.longitud, d.latitud],
-    // Radio en metros, igual que el ancho del trazado, para que los círculos
-    // de estación acompañen a la línea al acercar el zoom.
+    // Radius in meters, like the trace width, so the station circles follow
+    // the line when zooming in.
     getRadius: 55,
     radiusUnits: 'meters',
     radiusMinPixels: 2.5,
@@ -1122,8 +1125,9 @@ function App() {
     pickable: false,
   });
 
-  // Estructura física de la red de buses (Red): capa de contexto tenue. Muestra
-  // por dónde pasan las líneas, con o sin demanda, a diferencia del campo vectorial.
+  // Physical structure of the bus network (Red): faint context layer. It
+  // shows where the lines run, with or without demand, unlike the vector
+  // field.
   const redBusesLayer = mostrarRedBuses && new PathLayer({
     id: 'red-buses',
     data: RECORRIDOS_BUSES,
@@ -1142,14 +1146,14 @@ function App() {
   //     HEATMAP LAYER
   //
 
-  // Reducimos transparencia cuando las partículas están visibles
+  // Lower the opacity while the particles are visible
   const [opacidadHeatmap, setOpacidadHeatmap] = useState(1);
   useEffect(() => {
     setOpacidadHeatmap(mostrarParticulas ? 0.5 : 1);
   }, [mostrarParticulas]);
 
 
-  // Define que matriz de pesos usar para el HeatMap
+  // Chooses the weight matrix for the heatmap
   function obtenerMatrizPesos() {
       switch (modo) {
       case 'buses': 
@@ -1157,7 +1161,7 @@ function App() {
       case 'metro': 
         return matrizPesosMetroRef.current;
       case 'total': 
-        // Sumar los pesos de buses y metro
+        // Add the bus and Metro weights
         const total = [];
         for (let i = 0; i < matrizPesosBusesRef.current.length; i++) {
           total[i] = matrizPesosBusesRef.current[i] + matrizPesosMetroRef.current[i];
@@ -1168,12 +1172,12 @@ function App() {
     }
   }
 
-  // Función para convertir la matriz en datos para el HeatMap
+  // Converts the matrix into heatmap data
   function generarDatosHeatmap() {
     const matrizPesos = obtenerMatrizPesos();
     const datos = [];
     
-    // Todos los modos usan hexágonos ahora
+    // Every mode uses hexagons now
     for (let hexId = 0; hexId < matrizPesos.length; hexId++) {
       const peso = matrizPesos[hexId];
       if (peso > 0) {
@@ -1187,20 +1191,20 @@ function App() {
     return datos;
   }
 
-  // Paleta para heatmap: plasma (perceptualmente uniforme), azul -> magenta -> naranja -> amarillo.
-  // El alfa crece con la densidad para que las zonas bajas queden tenues.
+  // Heatmap palette: plasma (perceptually uniform), blue -> magenta -> orange
+  // -> yellow. The alpha grows with density so low zones stay faint.
   const heatmapColors = [
-    [13, 8, 135, 70],      // Azul profundo
-    [126, 3, 168, 120],    // Púrpura
+    [13, 8, 135, 70],      // Deep blue
+    [126, 3, 168, 120],    // Purple
     [203, 70, 121, 160],   // Magenta
-    [248, 149, 64, 190],   // Naranja
-    [253, 195, 40, 225],   // Ámbar
-    [240, 249, 33, 255]    // Amarillo
+    [248, 149, 64, 190],   // Orange
+    [253, 195, 40, 225],   // Amber
+    [240, 249, 33, 255]    // Yellow
   ];
 
   const datosHeatmap = useMemo(() => generarDatosHeatmap(), [modo, mostrarHeatmap, datosVersion]);
 
-  // Datos del heatmap de la hora B (split map): misma agregación por modo, desde datosB.
+  // Hour-B heatmap data (split map): same per-mode aggregation, from datosB.
   const datosHeatmapB = useMemo(() => {
     if (!comparar || !datosB) return [];
     const pesos = modo === 'buses' ? datosB.pesosBuses
@@ -1213,9 +1217,10 @@ function App() {
     return datos;
   }, [comparar, datosB, modo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // El heatmap se fija al nivel elegido (nivelHeatmap), no a la cámara: el radio en píxeles se
-  // ajusta por 2^(zoomCámara - nivel) para que la huella geográfica sea siempre la del nivel.
-  // Se acota el radio renderizado para no degradar el rendimiento en combinaciones extremas.
+  // The heatmap is pinned to the chosen level (nivelHeatmap), not the camera:
+  // the pixel radius adjusts by 2^(cameraZoom - level) so the geographic
+  // footprint is always that of the level. The rendered radius is bounded to
+  // avoid degrading performance in extreme combinations.
   const radioHeatmapPx = Math.min(1200, Math.max(2,
     RADIO_BASE_HEATMAP * Math.pow(2, viewState.zoom - nivelHeatmap)));
   const propsHeatmap = {
@@ -1239,8 +1244,8 @@ function App() {
 
 
 
-  // Etiquetas con el nombre de cada estación de metro. Solo al acercar, para no saturar,
-  // y solo si el toggle de nombres está activo (independiente del trazado).
+  // Labels with the name of each Metro station. Only when zoomed in, to avoid
+  // clutter, and only if the names toggle is on (independent of the trace).
   const etiquetasMetroLayer = mostrarNombresMetro && viewState.zoom >= ZOOM_MIN_ETIQUETAS_METRO && new TextLayer({
     id: 'etiquetas-metro',
     data: ESTACIONES_METRO,
@@ -1248,8 +1253,8 @@ function App() {
     getText: d => d.nombre,
     getSize: 12,
     sizeUnits: 'pixels',
-    // El TextLayer no hereda el CSS: la fuente se declara aqui para que las
-    // etiquetas usen la misma tipografia que el resto de la interfaz.
+    // The TextLayer does not inherit CSS: the font is declared here so the
+    // labels use the same typography as the rest of the interface.
     fontFamily: '"Space Grotesk", sans-serif',
     getColor: [20, 20, 30, 255],
     getTextAnchor: 'middle',
@@ -1262,10 +1267,10 @@ function App() {
     pickable: false,
   });
 
-  // Orden de dibujo (abajo -> arriba): estructura de red como base, luego flujo,
-  // vectores y etiquetas encima.
-  // Capas extra (capasExtra.js): se construyen con el contexto actual y se
-  // agregan al final del stack. Un error en una no rompe el resto.
+  // Draw order (bottom -> top): network structure as the base, then flow,
+  // vectors, and labels on top.
+  // Extra layers (capasExtra.js): built with the current context and appended
+  // at the end of the stack. An error in one does not break the rest.
   const capasExtraLayers = CAPAS_EXTRA
     .filter((c) => capasExtraVisibles[c.id])
     .map((c) => {
@@ -1282,7 +1287,7 @@ function App() {
           deck: { PolygonLayer, PathLayer, ScatterplotLayer, TextLayer, HeatmapLayer, TripsLayer },
         });
       } catch (e) {
-        console.error(`Capa extra "${c.id}" falló:`, e);
+        console.error(`Extra layer "${c.id}" failed:`, e);
         return null;
       }
     });
@@ -1304,9 +1309,9 @@ function App() {
     ...capasExtraLayers,
   ].filter(Boolean);
 
-  // Split map: dos MapView lado a lado con cámara enlazada (comparten el mismo
-  // viewState porque no está indexado por id de vista). El filtro enruta cada
-  // capa a su lado; las de contexto van en ambos.
+  // Split map: two side-by-side MapViews with a linked camera (they share the
+  // same viewState because it is not indexed by view id). The filter routes
+  // each layer to its side; context layers go in both.
   const vistasComparacion = useMemo(() => ([
     new MapView({ id: 'izq', x: 0, width: '50%', controller: true }),
     new MapView({ id: 'der', x: '50%', width: '50%', controller: true }),
@@ -1319,8 +1324,8 @@ function App() {
   };
 
 
-  // Leyenda de las tres paletas (heatmap, buses, metro). Contenido estático: se
-  // arma una sola vez para que no se reconstruya en cada frame de la animación.
+  // Legend of the three palettes (heatmap, buses, metro). Static content:
+  // built once so it is not rebuilt on every animation frame.
   const leyendasAgrupadas = useMemo(() => (
       <div style={{
         ...CAJA_UI,
@@ -1333,7 +1338,7 @@ function App() {
         display: 'flex',
         gap: '12px'
       }}>
-          {/* Leyenda del Heatmap */}
+          {/* Heatmap legend */}
           <div style={{ minWidth: '80px' }}>
             <div style={{ fontWeight: 'bold', marginBottom: '3px', fontSize: '11px' }}>Heatmap</div>
             <div style={{ display: 'flex', height: '12px', borderRadius: '2px', overflow: 'hidden' }}>
@@ -1350,7 +1355,7 @@ function App() {
             </div>
           </div>
           
-          {/* Leyenda de Buses */}
+          {/* Bus legend */}
           <div style={{ minWidth: '80px' }}>
             <div style={{ fontWeight: 'bold', marginBottom: '3px', fontSize: '11px' }}>Buses</div>
             <div style={{ display: 'flex', height: '12px', borderRadius: '2px', overflow: 'hidden' }}>
@@ -1367,7 +1372,7 @@ function App() {
             </div>
           </div>
         
-        {/* Leyenda de Metro */}
+        {/* Metro legend */}
         <div style={{ minWidth: '80px'}}>
           <div style={{ fontWeight: 'bold', marginBottom: '3px', fontSize: '11px' }}>Metro</div>
           <div style={{ display: 'flex', height: '12px', borderRadius: '2px', overflow: 'hidden' }}>
@@ -1396,12 +1401,12 @@ function App() {
       height: '100vh',
       width: '100vw',
       overflow: 'hidden',
-      // Fondo de respaldo mientras cargan los tiles del basemap del split.
+      // Fallback background while the split basemap tiles load.
       background: comparar ? (estiloMapa === EstiloMapaClaro ? '#f2f2f4' : '#0b0e14') : undefined,
     }}>
-      {/* Split map: dos basemaps de media pantalla bajo el canvas de deck. Cada
-          uno se controla con el mismo viewState (cámara enlazada) y no captura
-          eventos (interactive=false); el controller de deck maneja la cámara. */}
+      {/* Split map: two half-screen basemaps under the deck canvas. Both are
+          driven by the same viewState (linked camera) and capture no events
+          (interactive=false); the deck controller handles the camera. */}
       {comparar && [
         { key: 'izq', left: 0, atrib: false },
         { key: 'der', left: '50%', atrib: true },
@@ -1422,31 +1427,31 @@ function App() {
         </div>
       ))}
       <DeckGL
-        // viewState siempre controlado: evita el salto controlado -> no controlado
-        // al salir de comparación, que dejaba la cámara sin responder a eventos.
+        // viewState always controlled: avoids the controlled -> uncontrolled
+        // jump when leaving the comparison, which left the camera unresponsive.
         viewState={viewState}
         {...(comparar ? { views: vistasComparacion, layerFilter: filtrarCapaPorVista } : {})}
         controller={true}
         layers={layers}
-        // En móvil se rasteriza a 1 píxel por píxel CSS (sin supersampling
-        // retina): el mayor ahorro de fragment shader en pantallas de gama baja.
+        // On mobile it rasterizes at 1 pixel per CSS pixel (no retina
+        // supersampling): the largest fragment-shader saving on low-end screens.
         useDevicePixels={esMovil ? 1 : true}
         style={{ width: '100%', height: '100%', ...(comparar ? { position: 'absolute', top: 0, left: 0, zIndex: 1 } : {}) }}
         onViewStateChange={({viewState}) => {
-          // Forzar límites de zoom
+          // Enforce the zoom limits
           if (viewState.zoom < 10) viewState.zoom = 10;
           if (viewState.zoom > 16) viewState.zoom = 16;
           
-          // Determinar nivel de zoom
+          // Determine the zoom level
           let newZoomLevel;
           if (viewState.zoom < 11) newZoomLevel = 1;
           else if (viewState.zoom >= 11 && viewState.zoom < 12) newZoomLevel = 2;
           else newZoomLevel = 3;
 
-          // Obtener límites para el nivel de zoom actual
+          // Get the limits for the current zoom level
           const limites = limitesPorZoomLevel[newZoomLevel];
           
-          // Forzar límites geográficos
+          // Enforce the geographic limits
           if (viewState.longitude < limites.minLon) viewState.longitude = limites.minLon;
           if (viewState.longitude > limites.maxLon) viewState.longitude = limites.maxLon;
           if (viewState.latitude < limites.minLat) viewState.latitude = limites.minLat;
@@ -1454,22 +1459,22 @@ function App() {
 
           setViewState(viewState);
           
-          // Actualizar solo si cambió
+          // Update only on change
           if (zoomLevel !== newZoomLevel) {
             setZoomLevel(newZoomLevel);
           }
         }}
       >
-        {/* Vista única: el basemap va como hijo de deck (deck maneja la cámara).
-            En comparación se usan dos basemaps hermanos, arriba en el return. */}
+        {/* Single view: the basemap goes as a child of deck (deck drives the
+            camera). The comparison uses two sibling basemaps, above in the return. */}
         {!comparar && <Map
           mapStyle={estiloMapa}
           attributionControl={false}
         >
-          {/* Atribución de OSM/Carto en modo compacto: requisito de licencia
-              de los basemaps, relevante al publicar la demo. */}
+          {/* OSM/Carto attribution in compact mode: a license requirement of
+              the basemaps, relevant when publishing the demo. */}
           <AttributionControl compact position="bottom-right" />
-          {/* Escala del mapa, corrida hacia el centro para no quedar bajo la paleta. */}
+          {/* Map scale, shifted toward the center so it is not under the palette. */}
           <ScaleControl
             position="bottom-right"
             maxWidth={90}
@@ -1478,7 +1483,7 @@ function App() {
         </Map>}
       </DeckGL>
 
-      {/* Split map: divisor central y etiqueta de hora sobre cada mitad. */}
+      {/* Split map: central divider and an hour label over each half. */}
       {comparar && (
         <>
           <div style={{
@@ -1499,9 +1504,9 @@ function App() {
       )}
 
 
-      {/* Chrome flotante: todas las cajas comparten CAJA_UI / BOTON_UI. */}
+      {/* Floating chrome: every box shares CAJA_UI / BOTON_UI. */}
 
-      {/* Nombre de la app y proyecto (arriba a la izquierda) */}
+      {/* App and project name (top left) */}
       {MOSTRAR_UI && <div style={{
         ...CAJA_UI,
         position: 'absolute', top: esMovil ? 12 : 16, left: esMovil ? 12 : 16, zIndex: 11,
@@ -1515,8 +1520,8 @@ function App() {
         </div>}
       </div>}
 
-      {/* Selector de modo. En móvil se oculta para dejar ver el mapa: queda en
-          el modo por omisión (total). */}
+      {/* Mode selector. Hidden on mobile to leave room for the map: it stays
+          on the default mode (total). */}
       {MOSTRAR_UI && !esMovil && <div style={{
         ...CAJA_UI,
         position: 'absolute', top: 78, left: 16, zIndex: 11,
@@ -1541,9 +1546,9 @@ function App() {
         ))}
       </div>}
 
-      {/* Caja de tiempo: arriba al centro en escritorio, barra inferior de
-          ancho completo en móvil. En comparación se parte en dos sliders
-          (izquierda/derecha), cada uno carga su hora al soltar el pulgar. */}
+      {/* Time box: top center on desktop, full-width bottom bar on mobile.
+          In comparison mode it splits into two sliders (left/right), each
+          loading its hour when the thumb is released. */}
       {MOSTRAR_UI && <div style={{
         ...CAJA_UI,
         position: 'absolute', zIndex: 11,
@@ -1610,7 +1615,7 @@ function App() {
             <span style={{ color: 'white', fontWeight: '700', fontSize: esMovil ? '12px' : '13px', minWidth: esMovil ? '64px' : '92px', textAlign: 'center' }}>
               {String(horaVisual).padStart(2, '0')}:00-{String((horaVisual + 1) % 24).padStart(2, '0')}:00
             </span>
-            {/* Comparar solo en escritorio: el split map es poco usable en móvil. */}
+            {/* Compare only on desktop: the split map is hardly usable on mobile. */}
             {!esMovil && <button
               onClick={entrarComparacion}
               style={{ ...BOTON_PLANO, background: CAJA_UI.background, fontWeight: '600' }}
@@ -1621,8 +1626,8 @@ function App() {
         )}
       </div>}
 
-      {/* Aviso de carga o de error al cambiar de hora. Aparece solo mientras se
-          cargan datos o si la carga falla; en reposo no se muestra. */}
+      {/* Loading or error notice when changing the hour. Shown only while
+          data loads or when loading fails; hidden otherwise. */}
       {MOSTRAR_UI && (cargandoDatos || datosError) && <div style={{
         ...CAJA_UI,
         position: 'absolute', zIndex: 13, left: '50%', transform: 'translateX(-50%)',
@@ -1634,7 +1639,7 @@ function App() {
         {datosError ? datosError : <><span className="spinner-carga" />Cargando datos...</>}
       </div>}
 
-      {/* Config (arriba a la derecha) */}
+      {/* Config (top right) */}
       {MOSTRAR_UI && <button
         className="boton-configuracion"
         onClick={() => setMostrarPanelConfiguraciones(!mostrarPanelConfiguraciones)}
@@ -1647,8 +1652,8 @@ function App() {
         Config
       </button>}
 
-      {/* Capas visibles (siempre a la vista, bajo el selector de modo). Solo
-          escritorio: en móvil se omiten para dejar ver el mapa. */}
+      {/* Visible layers (always shown, under the mode selector). Desktop
+          only: omitted on mobile to leave room for the map. */}
       {MOSTRAR_UI && !esMovil && <div style={{
         ...CAJA_UI,
         position: 'absolute', top: 124, left: 16, zIndex: 10,
@@ -1688,7 +1693,7 @@ function App() {
         ))}
       </div>}
 
-      {/* Panel de configuraciones (ajustes de animación y escalas) */}
+      {/* Settings panel (animation and scale adjustments) */}
       {MOSTRAR_UI && mostrarPanelConfiguraciones && (
         <div className="panel-configuraciones" style={{
           ...CAJA_UI,
@@ -1699,8 +1704,8 @@ function App() {
         }}>
           {esMovil && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              {/* En móvil se omite el menú de capas: el mapa queda con los valores
-                  por omisión (flujo animado, trazado de Metro). Solo estilo y acerca. */}
+              {/* The layers menu is omitted on mobile: the map keeps the
+                  defaults (animated flow, Metro trace). Only style and about. */}
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 {[
                   { value: EstiloMapaClaro, name: 'Claro' },
@@ -1742,7 +1747,7 @@ function App() {
             Seguir recorridos (buses)
           </label>
 
-          {/* Capas de bajo nivel (diagnóstico del campo) */}
+          {/* Low-level layers (field diagnostics) */}
           <div style={{
             display: 'flex', flexDirection: 'column', gap: '7px',
             borderTop: '1px solid rgba(255, 255, 255, 0.12)', paddingTop: '8px'
@@ -1837,7 +1842,7 @@ function App() {
         </div>
       )}
 
-      {/* Contador de viajes (sobre la paleta de colores; solo escritorio) */}
+      {/* Trip counter (above the color palette; desktop only) */}
       {MOSTRAR_UI && !esMovil && <div style={{
         ...CAJA_UI,
         position: 'absolute', bottom: 92, right: 16, zIndex: 10,
@@ -1853,7 +1858,7 @@ function App() {
 
       {MOSTRAR_UI && !esMovil && leyendasAgrupadas}
 
-      {/* Estilo de mapa y créditos (abajo a la izquierda; solo escritorio) */}
+      {/* Map style and credits (bottom left; desktop only) */}
       {MOSTRAR_UI && !esMovil && <div style={{
         position: 'absolute', left: 16, bottom: 16, zIndex: 10,
         display: 'flex', alignItems: 'stretch', gap: '8px'
@@ -1884,7 +1889,7 @@ function App() {
         </button>
       </div>}
 
-      {/* Popup de información del sistema y créditos */}
+      {/* System info and credits popup */}
       {MOSTRAR_UI && mostrarInfo && (
         <div
           onClick={() => setMostrarInfo(false)}

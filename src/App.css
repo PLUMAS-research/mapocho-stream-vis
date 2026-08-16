@@ -85,7 +85,7 @@ input[type="range"]::-webkit-slider-thumb {
 .custom-slider-compact {
   -webkit-appearance: none;
   appearance: none;
-  height: 4px; /* Más delgado */
+  height: 4px; /* Thinner */
   background: linear-gradient(to right, #3a3a4a, #4a90e2);
   border-radius: 2px;
   outline: none;
@@ -94,7 +94,7 @@ input[type="range"]::-webkit-slider-thumb {
 .custom-slider-compact::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px; /* Más pequeño */
+  width: 14px; /* Smaller */
   height: 14px;
   border-radius: 50%;
   background: #4a90e2;
@@ -112,33 +112,33 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   border: 2px solid white;
 }
-/* --- Estética de la interfaz ------------------------------------------- */
-/* Space Grotesk en toda la interfaz (los canvas del mapa no la usan). */
+/* --- Interface styling -------------------------------------------------- */
+/* Space Grotesk across the interface (the map canvases do not use it). */
 body {
   font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
 }
 
-/* Botones: mayúsculas con tracking y esquinas rectas, registro técnico. */
+/* Buttons: uppercase with tracking and square corners, technical register. */
 button {
   font-family: inherit;
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
 
-/* Sliders con el acento de la interfaz. */
+/* Sliders with the interface accent color. */
 input[type="range"] {
   accent-color: #0e7490;
 }
 
-/* Controles de MapLibre (escala y atribución): el contenedor completo se
-   corre hacia el centro para no quedar bajo la paleta de colores. */
+/* MapLibre controls (scale and attribution): the whole container shifts
+   toward the center so it does not sit under the color palette. */
 .maplibregl-ctrl-bottom-right {
   right: 330px;
   bottom: 10px;
 }
 
-/* Escala del mapa con aspecto clásico de barra (no de botón), legible sobre
-   el estilo oscuro por omisión. */
+/* Map scale with the classic bar look (not a button), readable over the
+   default dark style. */
 .maplibregl-ctrl-scale {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.6);
@@ -149,8 +149,8 @@ input[type="range"] {
   text-align: center;
 }
 
-/* En pantallas angostas los controles de MapLibre vuelven a la esquina (la
-   paleta se oculta) y quedan sobre la barra de tiempo inferior. */
+/* On narrow screens the MapLibre controls return to the corner (the
+   palette is hidden) and sit above the bottom time bar. */
 @media (max-width: 700px) {
   .maplibregl-ctrl-bottom-right {
     right: 12px;
@@ -161,7 +161,7 @@ input[type="range"] {
   }
 }
 
-/* Spinner del aviso de carga de datos por hora. */
+/* Spinner of the per-hour data loading notice. */
 .spinner-carga {
   width: 12px;
   height: 12px;

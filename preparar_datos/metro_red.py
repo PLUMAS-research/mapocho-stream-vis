@@ -1,14 +1,14 @@
-"""Red de Metro: grafo, ruteo y segmentación de etapas.
+"""Metro network: graph, routing, and stage segmentation.
 
-Reconstruye la ruta de una etapa de Metro (estación de subida -> estación de
-bajada) como la secuencia de estaciones intermedias por la red, y la parte en
-segmentos estación a estación con tiempos interpolados.
+Reconstructs the route of a Metro stage (boarding station -> alighting
+station) as the sequence of intermediate stations over the network, and
+splits it into station-to-station segments with interpolated times.
 
-La topología (qué estaciones tiene cada línea, en qué orden) ya no vive aquí:
-se deriva del feed GTFS (`gtfs_a_metro.py`, route_type 1) y se materializa en
-`src/json/RedMetro.json`, que los consumidores cargan y pasan a
-`construir_grafo`. Los nombres de estación van en mayúsculas sin acentos, como
-en los datos DTPM (IRARRAZAVAL, NUNOA, BIO BIO, etc.).
+The topology (which stations each line has, in which order) no longer lives
+here: it is derived from the GTFS feed (`gtfs_a_metro.py`, route_type 1) and
+materialized in `src/json/RedMetro.json`, which consumers load and pass to
+`construir_grafo`. Station names are uppercase without accents, as in the
+DTPM data (IRARRAZAVAL, NUNOA, BIO BIO, etc.).
 """
 
 from collections import defaultdict
@@ -16,20 +16,20 @@ from datetime import datetime, timedelta
 
 import networkx as nx
 
-# Pesos del ruteo: un transbordo equivale a 6 tramos de viaje.
+# Routing weights: one transfer is equivalent to 6 travel legs.
 PESO_TRAMO = 1
 PESO_TRANSBORDO = 6
 
 
 def construir_grafo(lineas):
-    """Arma el grafo de la red desde `lineas` ({linea: [estaciones en orden]}).
-    Cada nodo es 'ESTACION_LINEA'; las aristas unen estaciones contiguas de una
-    línea y conectan los nodos de una misma estación en distintas líneas
-    (transbordo).
+    """Builds the network graph from `lineas` ({line: [stations in order]}).
+    Each node is 'STATION_LINE'; edges join contiguous stations of a line and
+    connect the nodes of the same station on different lines (transfer).
 
-    El orden de iteración de `lineas` importa para la reproducibilidad: cuando
-    dos rutas empatan en costo, Dijkstra desempata según el orden de inserción
-    de nodos y aristas. `RedMetro.json` fija ese orden (ver gtfs_a_metro.py)."""
+    The iteration order of `lineas` matters for reproducibility: when two
+    routes tie in cost, Dijkstra breaks the tie according to the insertion
+    order of nodes and edges. `RedMetro.json` fixes that order (see
+    gtfs_a_metro.py)."""
     G = nx.Graph()
     nombre_a_nodos = defaultdict(list)
     for linea, estaciones in lineas.items():
@@ -47,9 +47,9 @@ def construir_grafo(lineas):
 
 
 def camino_estaciones(grafo, inicio, fin):
-    """Camino más corto entre dos estaciones (por nombre). Devuelve la secuencia
-    de estaciones intermedias, ya colapsando los nodos de transbordo. Devuelve
-    lista vacía si alguna estación no existe o no hay camino."""
+    """Shortest path between two stations (by name). Returns the sequence of
+    intermediate stations, collapsing the transfer nodes. Returns an empty
+    list if a station does not exist or there is no path."""
     nodos_ini = [n for n in grafo.nodes if grafo.nodes[n]["label"] == inicio]
     nodos_fin = [n for n in grafo.nodes if grafo.nodes[n]["label"] == fin]
     if not nodos_ini or not nodos_fin:
@@ -79,10 +79,10 @@ def camino_estaciones(grafo, inicio, fin):
 
 
 def segmentos_con_tiempo(estaciones, t_subida, t_bajada):
-    """Parte una secuencia de estaciones en segmentos contiguos y reparte el
-    tiempo de la etapa de forma uniforme entre ellos. `t_subida` y `t_bajada`
-    son datetime. Devuelve tuplas (estIni, estFin, horaIni, horaFin) con horas
-    como objetos time."""
+    """Splits a station sequence into contiguous segments and divides the
+    stage time uniformly among them. `t_subida` and `t_bajada` are datetime.
+    Returns tuples (estIni, estFin, horaIni, horaFin) with hours as time
+    objects."""
     if len(estaciones) < 2:
         return []
     total = (t_bajada - t_subida).total_seconds()

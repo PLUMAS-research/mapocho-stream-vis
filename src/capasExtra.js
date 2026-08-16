@@ -1,30 +1,30 @@
-// Punto de extensión para capas adicionales.
+// Extension point for additional layers.
 //
-// Cada entrada de CAPAS_EXTRA agrega una capa deck.gl al mapa, con su propio
-// toggle en el panel de capas, SIN tocar App.js. Sirve para cruzar el flujo con
-// otros datos (por ejemplo puntos de interés, zonas, resultados de un modelo) o
-// para dibujar glifos sobre las celdas.
+// Each entry of CAPAS_EXTRA adds a deck.gl layer to the map, with its own
+// toggle in the layers panel, WITHOUT touching App.js. It serves to cross the
+// flow with other data (for example points of interest, zones, model outputs)
+// or to draw glyphs over the cells.
 //
-// Forma de cada entrada:
-//   id:        string único (se usa también como id de la capa deck.gl)
-//   etiqueta:  texto del toggle en el panel "Capas"
-//   porDefecto: bool, si la capa arranca visible
-//   crearCapa(ctx): devuelve UNA capa deck.gl (o null para no dibujar nada esta
-//                   vez). Se llama en cada render de la capa; el contexto trae:
+// Shape of each entry:
+//   id:        unique string (also used as the deck.gl layer id)
+//   etiqueta:  toggle text in the "Capas" panel
+//   porDefecto: bool, whether the layer starts visible
+//   crearCapa(ctx): returns ONE deck.gl layer (or null to draw nothing this
+//                   time). Called on every layer render; the context brings:
 //     {
-//       hora, modo, esMovil,       // estado actual de la vista
-//       viewState,                 // cámara (latitude, longitude, zoom)
-//       hexagonosData,             // celdas de la grilla: { id, h3, c:[lon,lat], vecinos }
-//       h3ToId,                    // objeto índice H3 -> id local
-//       matrices: {                // campo de la hora/modo actuales (por id de celda)
+//       hora, modo, esMovil,       // current view state
+//       viewState,                 // camera (latitude, longitude, zoom)
+//       hexagonosData,             // grid cells: { id, h3, c:[lon,lat], vecinos }
+//       h3ToId,                    // H3 index -> local id object
+//       matrices: {                // field of the current hour/mode (by cell id)
 //         vectoresBuses, pesosBuses, vectoresMetro, pesosMetro,
 //       },
-//       deck,                      // clases de capa de deck.gl (no re-importar)
+//       deck,                      // deck.gl layer classes (do not re-import)
 //     }
-//   El objeto `deck` expone: PolygonLayer, PathLayer, ScatterplotLayer,
+//   The `deck` object exposes: PolygonLayer, PathLayer, ScatterplotLayer,
 //   TextLayer, HeatmapLayer, TripsLayer.
 //
-// Ejemplo (descomentar y adaptar):
+// Example (uncomment and adapt):
 //
 //   import misPuntos from './json/mis-puntos.json'; // [{ lon, lat, valor }, ...]
 //   export const CAPAS_EXTRA = [

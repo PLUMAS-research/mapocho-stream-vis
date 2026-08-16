@@ -12,36 +12,36 @@ class ContadorPesos {
     }
 
     agregarPeso(tipo, hora, peso) {
-        // Descartar pesos con valor 0
+        // Discard zero weights
         if (peso === 0) {
             return false;
         }
 
-        // Validar parámetros
+        // Validate parameters
         if (!['buses', 'metro'].includes(tipo)) {
-            console.error(`Tipo ${tipo} no válido. Debe ser 'buses' o 'metro'.`);
+            console.error(`Invalid type ${tipo}. Must be 'buses' or 'metro'.`);
             return false;
         }
 
         if (hora < 0 || hora > 23) {
-            console.error(`Hora ${hora} no válida. Debe estar entre 0 y 23.`);
+            console.error(`Invalid hour ${hora}. Must be between 0 and 23.`);
             return false;
         }
 
-        // No procesar si ya está completo
+        // Skip if this bucket is already complete
         if (this.completo[tipo][hora]) {
             return false;
         }
 
-        // Agregar peso
+        // Add the weight
         this.datos[tipo][hora].push(peso);
 
-        // Verificar si se completó esta hora
+        // Check whether this hour is now complete
         if (this.datos[tipo][hora].length >= 1000) {
             this.completo[tipo][hora] = true;
-            console.log(`¡Completado! ${tipo} - Hora ${hora}: 1000 datos recolectados`);
-            
-            // Verificar si todos están completos
+            console.log(`Complete: ${tipo} - hour ${hora}: 1000 samples collected`);
+
+            // Check whether every bucket is complete
             this.verificarCompletitud();
         }
 
@@ -49,15 +49,15 @@ class ContadorPesos {
     }
 
     verificarCompletitud() {
-        // Verificar buses (todas las horas)
+        // Check buses (all hours)
         const busesCompleto = this.completo['buses'].every(completo => completo);
-        
-        // Verificar metro (solo horas 6-23)
+
+        // Check metro (hours 6-23 only)
         const metroCompleto = this.completo['metro'].slice(6, 24).every(completo => completo);
-        
+
         if (busesCompleto && metroCompleto) {
             this.todosCompletos = true;
-            console.log('¡Todos los datos han sido recolectados! Generando reporte...');
+            console.log('All samples collected. Generating the report...');
             this.guardarDatos();
         }
     }
@@ -77,14 +77,14 @@ class ContadorPesos {
         ['buses', 'metro'].forEach(tipo => {
             for (let hora = 0; hora < 24; hora++) {
                 const pesos = this.datos[tipo][hora];
-                
-                // Solo generar reporte si hay datos
+
+                // Only report buckets with data
                 if (pesos.length > 0) {
                     const sorted = [...pesos].sort((a, b) => a - b);
                     const suma = pesos.reduce((a, b) => a + b, 0);
                     const media = suma / pesos.length;
                     const desviacion = this.calcularDesviacionEstandar(pesos);
-                    
+
                     reporte[tipo][hora] = {
                         'cantidad': pesos.length,
                         'minimo': Math.min(...pesos),
@@ -118,16 +118,16 @@ class ContadorPesos {
     }
 
     guardarDatos() {
-        // Solo generar y descargar el reporte, no los datos crudos
+        // Only generate and download the report, not the raw samples
         const reporte = JSON.stringify(this.generarReporte(), null, 2);
-        
-        // Crear blob para descargar
+
+        // Blob for the download
         const blobReporte = new Blob([reporte], { type: 'application/json' });
-        
-        // Crear enlace de descarga
+
+        // Download link
         this.descargarArchivo(blobReporte, 'reporte_estadisticas_pesos.json');
-        
-        console.log('Reporte estadístico generado y disponible para descarga');
+
+        console.log('Statistics report generated and available for download');
     }
 
     descargarArchivo(blob, nombreArchivo) {
@@ -142,6 +142,6 @@ class ContadorPesos {
     }
 }
 
-// Instancia global del contador
+// Global counter instance
 const contadorPesos = new ContadorPesos();
 export default contadorPesos;

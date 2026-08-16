@@ -6,21 +6,21 @@ from datetime import timedelta
 import time
 from PreProcesamientoBuses import rutasHexagonos
 
-# Velocidad máxima plausible de un bus (km/h); sobre esto el segmento se
-# descarta como outlier. El paper documenta este filtro de >100 km/h.
+# Maximum plausible bus speed (km/h); above this the segment is discarded as
+# an outlier. The paper documents this >100 km/h filter.
 VELOCIDAD_MAX_KMH = 100
 
 
 def haversine(lat1, lon1, lat2, lon2):
-    # Se calcula la distancia en km entre dos puntos geográficos
-    R = 6371  # Radio de la Tierra en km
+    # Distance in km between two geographic points
+    R = 6371  # Earth radius in km
     dLat = radians(lat2 - lat1)
     dLon = radians(lon2 - lon1)
     a = sin(dLat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dLon/2)**2
     return R * 2 * asin(sqrt(a))
 
 def tiempoMinutos(horaInicio, horaFin):
-    """Calcula la diferencia en minutos entre dos timestamps"""
+    """Difference in minutes between two timestamps"""
     if horaFin < horaInicio:
         horaFin += timedelta(days=1)
     return (horaFin - horaInicio).total_seconds() / 60.0
@@ -29,10 +29,10 @@ def tiempoMinutos(horaInicio, horaFin):
 def processGrillaBuses(resolucion: int, horaRango: int):
     horaInicial = time.time()
     print(f"\n{'='*50}")
-    print(f"Procesando hora {horaRango} con resolución H3 {resolucion}")
+    print(f"Processing hour {horaRango} with H3 resolution {resolucion}")
     print(f"{'='*50}")
 
-    # Cargar geometría H3 de la grilla
+    # Load the H3 grid geometry
     sufijo = f"r{resolucion}"
     try:
         with open(f'json/Hexagon_{sufijo}.json', 'r', encoding='utf-8') as f:
@@ -40,15 +40,15 @@ def processGrillaBuses(resolucion: int, horaRango: int):
 
         nHexagonos = hexData['numCeldas']
         h3ToId = {c: i for i, c in enumerate(hexData['celdas'])}
-        print(f"Geometría H3 cargada: {nHexagonos} celdas (resolución {resolucion})")
+        print(f"H3 geometry loaded: {nHexagonos} cells (resolution {resolucion})")
     except FileNotFoundError:
-        print(f"Error: archivo de geometría no encontrado (json/Hexagon_{sufijo}.json)")
+        print(f"Error: geometry file not found (json/Hexagon_{sufijo}.json)")
         raise
 
-    # Iterador de segmentos por lotes (no materializa la hora completa).
+    # Batched segment iterator (does not materialize the whole hour).
     registros = leer_segmentos_buses(horaRango)
 
-    # Inicializar matrices para hexágonos
+    # Initialize the hexagon matrices
     vectoresHexagonos = np.zeros((nHexagonos, 2), dtype=np.float64)
     pesosHexagonos = np.zeros(nHexagonos, dtype=np.float64)
 
@@ -59,11 +59,11 @@ def processGrillaBuses(resolucion: int, horaRango: int):
 
     for row in registros:
         if totalRegistros % 100000 == 0:
-            print(f"Registro numero: {totalRegistros}")
+            print(f"Record number: {totalRegistros}")
 
         id, latIni, lonIni, latFin, lonFin, tIni, tFin, carga, horarango = row
-        
-        # Convertir a float
+
+        # Convert to float
         latIni = float(latIni)
         lonIni = float(lonIni)
         latFin = float(latFin)
@@ -73,70 +73,70 @@ def processGrillaBuses(resolucion: int, horaRango: int):
         totalRegistros += 1
 
         try:
-            # Calcular tiempo en minutos
+            # Compute the time in minutes
             tiempoMin = tiempoMinutos(tIni, tFin)
-            
-            # 1. Evitar división por cero
+
+            # 1. Avoid division by zero
             if tiempoMin <= 0:
                 registrosInvalidos += 1
                 continue
-                
-            # 2. Filtrar outliers por velocidad
+
+            # 2. Filter outliers by speed
             distancia = haversine(latIni, lonIni, latFin, lonFin)
             velocidad_kmh = distancia / (tiempoMin / 60)  # km/h
-            
-            if velocidad_kmh > VELOCIDAD_MAX_KMH:  # descartar buses demasiado rápidos
+
+            if velocidad_kmh > VELOCIDAD_MAX_KMH:  # discard buses that are too fast
                 registrosInvalidos += 1
                 continue
-                
+
         except Exception as e:
-            print(f"Error en registro {id}: {e}")
+            print(f"Error in record {id}: {e}")
             registrosInvalidos += 1
             continue
 
-        # Calcular vector unitario por minuto
+        # Compute the unit vector per minute
         unitLon = (lonFin - lonIni) / tiempoMin
         unitLat = (latFin - latIni) / tiempoMin
 
-        # Obtener las celdas H3 en la ruta
+        # Get the H3 cells along the route
         try:
             hexIds = rutasHexagonos(latIni, lonIni, latFin, lonFin, resolucion, h3ToId)
         except Exception as e:
-            print(f"Error en rutasHexagonos: {e}")
+            print(f"Error in rutasHexagonos: {e}")
             registrosInvalidos += 1
             continue
-        
-        # Procesar cada hexágono en la ruta
+
+        # Process each hexagon along the route
         for hexId in hexIds:
             if 0 <= hexId < nHexagonos:
                 vectoresHexagonos[hexId, 0] += unitLon * carga
                 vectoresHexagonos[hexId, 1] += unitLat * carga
                 pesosHexagonos[hexId] += carga
                 totalCarga += carga
-        
+
         registrosValidos += 1
 
-    print(f"Total de registros procesados: {totalRegistros}")
-    print(f"  - Registros válidos: {registrosValidos}")
-    print(f"  - Registros descartados: {registrosInvalidos}")
-    print(f"Total de contribuciones a la grilla: {totalCarga}")
+    print(f"Total records processed: {totalRegistros}")
+    print(f"  - Valid records: {registrosValidos}")
+    print(f"  - Discarded records: {registrosInvalidos}")
+    print(f"Total contributions to the grid: {totalCarga}")
 
     MAX_VECTOR_THRESHOLD = 3
 
-    # Normalizar vectores
+    # Normalize the vectors
     for hexId in range(nHexagonos):
         peso = pesosHexagonos[hexId]
         if peso > 0.0:
             vectoresHexagonos[hexId, 0] /= peso
             vectoresHexagonos[hexId, 1] /= peso
 
-            # Detección de anomalías
+            # Anomaly detection
             magnitud = sqrt(vectoresHexagonos[hexId, 0]**2 + vectoresHexagonos[hexId, 1]**2)
             if magnitud > MAX_VECTOR_THRESHOLD:
-                print(f"Anómalo en hexágono {hexId}: peso={peso:.8f}, "
+                print(f"Anomalous hexagon {hexId}: peso={peso:.8f}, "
                       f"vector=({vectoresHexagonos[hexId, 0]:.4f}, {vectoresHexagonos[hexId, 1]:.4f})")
 
-    # Guardar resultados
+    # Save results
     rutaVectores = f"./json/MatrizVectoresBuses_{sufijo}_{horaRango}.json"
     with open(rutaVectores, "w") as f:
         json.dump(vectoresHexagonos.tolist(), f, indent=2)
@@ -150,10 +150,9 @@ def processGrillaBuses(resolucion: int, horaRango: int):
     with open(rutaPesos, "w") as f:
         json.dump(resultado, f, indent=2)
 
-    print(f"✅ Grillas para hora {horaRango} guardadas.")
+    print(f"Grids for hour {horaRango} saved.")
     deltaTiempo = time.time() - horaInicial
-    print(f"Tiempo: {deltaTiempo:.2f} segundos")
+    print(f"Time: {deltaTiempo:.2f} seconds")
 
-    # Devolver las rutas de los archivos generados
+    # Return the paths of the generated files
     return rutaVectores, rutaPesos
-    
