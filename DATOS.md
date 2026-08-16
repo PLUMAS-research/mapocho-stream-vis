@@ -1,24 +1,48 @@
-# Contrato de datos del pipeline
+# Pipeline data contract
 
-La pipeline de agregación lee dos conjuntos tabulares de segmentos de viaje desde `src/json/segmentos/{buses,metro}.parquet`. Este documento describe qué columnas debe entregar esa fuente para que el pipeline corra sin modificar la lógica de agregación.
+The aggregation pipeline reads two tabular sets of trip segments from
+`src/json/segmentos/{buses,metro}.parquet`. This document describes the
+columns that the source must deliver so the pipeline runs without changes to
+the aggregation logic.
 
-Este es el contrato de **nivel segmentos**, el más bajo de los dos que tiene el sistema. El contrato de **nivel viajes + GTFS** (etapas de viaje referidas a un feed GTFS, pensado para que otra ciudad corra el flujo completo de conversión) está en `preparar_datos/README.md`, sección "Contrato de entrada genérico".
+This is the **segment-level** contract, the lower of the two the system has.
+The **trips + GTFS** contract (trip stages referenced to a GTFS feed, meant
+for other cities to run the full conversion flow) is in
+`preparar_datos/README.md`, section "Generic input contract".
 
-Importante: no hay base de datos. El frontend lee JSON precalculados en `src/json/`. Los parquet de segmentos solo se necesitan para **regenerar** esos JSON con datos nuevos, y los produce el flujo DTPM.
+Important: there is no database. The frontend reads precomputed JSON under
+`src/json/`. The segment parquet files are only needed to **regenerate** that
+JSON with new data, and the DTPM flow produces them.
 
-> **Para generar datos desde los viajes DTPM**, no sigas este documento a mano: usa el flujo automatizado en `preparar_datos/` (ver `preparar_datos/README.md`). Convierte los viajes DTPM en los dos parquet de segmentos descritos abajo y corre todo el pipeline. Este documento describe el contrato de bajo nivel, útil si traes datos de otra fuente.
+> **To generate data from the DTPM trip records**, do not follow this document
+> by hand: use the automated flow in `preparar_datos/` (see
+> `preparar_datos/README.md`). It converts the DTPM records into the two
+> segment parquet files described below and runs the whole pipeline. This
+> document describes the low-level contract, useful if you bring data from
+> another source.
 
-## Punto único de conexión
+## Single connection point
 
-Todo el acceso a datos pasa por `src/FuenteDatos.py`, que expone `leer_segmentos_buses(hora)` y `leer_segmentos_metro(hora)` y lee los parquet. `CalcularGrillaBuses.py` y `CalcularGrillaMetro.py` solo llaman a esas funciones. Cada lector devuelve, por hora, un iterador de filas (tuplas) en el orden de columnas que espera la agregación; la lectura es por lotes, así que la memoria no depende del tamaño del archivo.
+All data access goes through `src/FuenteDatos.py`, which exposes
+`leer_segmentos_buses(hora)` and `leer_segmentos_metro(hora)` and reads the
+parquet files. `CalcularGrillaBuses.py` and `CalcularGrillaMetro.py` only call
+those functions. Each reader returns, per hour, an iterator of rows (tuples)
+in the column order that the aggregation expects; reads are batched, so memory
+does not depend on file size.
 
-El esquema de los parquet está en la sección "Esquema intermedio" de `preparar_datos/README.md`. Para traer datos de otra fuente (CSV, DuckDB, etc.), basta hacer que `FuenteDatos.py` devuelva las mismas tuplas; el resto del pipeline opera sobre tuplas en memoria.
+The parquet schema is in the "Intermediate schema" section of
+`preparar_datos/README.md`. To bring data from another source (CSV, DuckDB,
+etc.), it is enough to make `FuenteDatos.py` return the same tuples; the rest
+of the pipeline operates on in-memory tuples.
 
-> Las tablas SQL que se describen abajo (`vectoresbuses*`, `vectoresmetro*`) son referencia histórica del esquema de columnas y de la semántica de los campos. El pipeline ya no usa PostgreSQL.
+> The SQL tables described below (`vectoresbuses*`, `vectoresmetro*`) are a
+> historical reference for the column schema and the field semantics. The
+> pipeline no longer uses PostgreSQL.
 
-## Tabla de buses
+## Bus table
 
-Nombre actual: `vectoresbuses082023` (el sufijo `082023` indica agosto 2023). La consulta en `CalcularGrillaBuses.py` es:
+Historical name: `vectoresbuses082023` (the `082023` suffix means August
+2023). The query in `CalcularGrillaBuses.py` was:
 
 ```sql
 SELECT id, latinicial, loninicial, latfinal, lonfinal,
@@ -31,22 +55,24 @@ WHERE carga > 0 AND horarango = %s
   AND carga IS NOT NULL
 ```
 
-Cada fila es un segmento dirigido entre dos paraderos consecutivos de un bus.
+Each row is a directed segment between two stops of a bus trip.
 
-| Columna | Tipo | Significado |
+| Column | Type | Meaning |
 |---|---|---|
-| `id` | entero | Identificador del segmento. |
-| `latinicial`, `loninicial` | float (WGS84) | Coordenada del paradero de origen. |
-| `latfinal`, `lonfinal` | float (WGS84) | Coordenada del paradero de destino. |
-| `tiempoinicial`, `tiempofinal` | timestamp | Hora de salida y de llegada del segmento. |
-| `carga` | número | Pasajeros a bordo al iniciar el segmento. Es el peso del segmento. |
-| `horarango` | entero 0–23 | Hora del día a la que pertenece el segmento. Particiona el procesamiento. |
+| `id` | integer | Segment identifier. |
+| `latinicial`, `loninicial` | float (WGS84) | Coordinate of the origin stop. |
+| `latfinal`, `lonfinal` | float (WGS84) | Coordinate of the destination stop. |
+| `tiempoinicial`, `tiempofinal` | timestamp | Departure and arrival time of the segment. |
+| `carga` | number | Weight of the segment (expanded demand in the current flow). |
+| `horarango` | integer 0-23 | Hour of the day. Partitions the processing. |
 
-Filtros que el pipeline asume: `carga > 0` y todas las columnas no nulas. Si la fuente nueva no garantiza esto, hay que filtrarlo antes de entregar las filas.
+Filters the pipeline assumes: `carga > 0` and no null columns. If a new source
+does not guarantee this, filter before delivering the rows.
 
-## Tabla de Metro
+## Metro table
 
-Nombre actual: `vectoresmetro112023` (el sufijo `112023` indica noviembre 2023). La consulta en `CalcularGrillaMetro.py` es:
+Historical name: `vectoresmetro112023` (the `112023` suffix means November
+2023). The query in `CalcularGrillaMetro.py` was:
 
 ```sql
 SELECT estacioninicial, estacionfinal,
@@ -59,22 +85,31 @@ WHERE tipodia = 'LABORAL' AND horarango = %s
   AND tiempoinicial IS NOT NULL AND tiempofinal IS NOT NULL
 ```
 
-Cada fila es un segmento estación a estación de una ruta reconstruida. El Metro no expone GPS, así que la ruta se reconstruye antes (grafo de la red + Dijkstra) y se materializa en esta tabla.
+Each row is a station-to-station segment of a reconstructed route. Metro
+trains expose no GPS, so the route is reconstructed beforehand (network graph
+plus shortest path) and materialized in this table.
 
-| Columna | Tipo | Significado |
+| Column | Type | Meaning |
 |---|---|---|
-| `estacioninicial`, `estacionfinal` | texto | Estaciones de origen y destino del segmento. |
-| `latinicial`, `loninicial` | float (WGS84) | Coordenada de la estación de origen. |
-| `latfinal`, `lonfinal` | float (WGS84) | Coordenada de la estación de destino. |
-| `tiempoinicial`, `tiempofinal` | timestamp | Hora de entrada y de salida del segmento. |
-| `horarango` | entero 0–23 | Hora del día. Se usa en el `WHERE`. |
-| `tipodia` | texto | Tipo de día. El pipeline filtra `'LABORAL'`. |
+| `estacioninicial`, `estacionfinal` | text | Origin and destination stations of the segment. |
+| `latinicial`, `loninicial` | float (WGS84) | Coordinate of the origin station. |
+| `latfinal`, `lonfinal` | float (WGS84) | Coordinate of the destination station. |
+| `tiempoinicial`, `tiempofinal` | timestamp | Entry and exit time of the segment. |
+| `horarango` | integer 0-23 | Hour of the day. Used in the `WHERE`. |
+| `tipodia` | text | Day type. The pipeline filters `'LABORAL'`. |
 
-A diferencia de los buses, esta tabla histórica no traía `carga`, y el pipeline le asignaba peso 1 a cada segmento de Metro (pesos no comparables entre modos). En el flujo vigente eso ya no aplica: el parquet de Metro trae `peso` = `factor_expansion`, el mismo peso de demanda expandida que usan los buses (ver `preparar_datos/README.md`).
+Unlike buses, this historical table carried no `carga`, and the pipeline
+assigned weight 1 to each Metro segment (weights not comparable across
+modes). In the current flow this no longer applies: the Metro parquet carries
+`peso` = `factor_expansion`, the same expanded-demand weight that buses use
+(see `preparar_datos/README.md`).
 
-## Notas
+## Notes
 
-- El sufijo del nombre de tabla codifica el mes y año del extracto (`082023` = agosto 2023, `112023` = noviembre 2023). Si cambias la ventana temporal, cambia el nombre de tabla en las dos consultas o usa el mismo nombre y reemplaza el contenido.
-- `horarango` particiona todo el procesamiento. `Main.py` corre las 24 horas en paralelo, una por proceso.
-- Las coordenadas deben estar en WGS84 (latitud/longitud en grados), porque el cálculo de distancias usa Haversine y la malla hexagonal asume ese sistema.
-- Construcción de estas tablas a partir de datos crudos ADATRAP (tablas `Profiles`, `paraderos`, `Etapas`, metadatos de estaciones): ver el diccionario de datos en `thesis/proposal.tex`. Esa etapa es previa al pipeline y queda fuera de este contrato.
+- The table-name suffix encodes the month and year of the extract (`082023` =
+  August 2023). This is historical; the current flow derives its window from
+  the extract itself (`metadatos.json`).
+- `horarango` partitions all processing. `Main.py` runs the 24 hours in
+  parallel, one per process.
+- Coordinates must be WGS84 (latitude/longitude in degrees): the distance
+  computation uses Haversine and the hexagonal grid assumes that system.

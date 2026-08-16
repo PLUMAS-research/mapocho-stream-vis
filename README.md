@@ -1,70 +1,73 @@
-# Mapocho: visualización de flujos de transporte público en Santiago
+# Mapocho: public transport flow visualization for Santiago
 
-Visualización de la demanda de buses Red y Metro del Gran Santiago como campos
-vectoriales por hora sobre una grilla hexagonal H3, animada como streamlets con
-deck.gl sobre un mapa. La aplicación se llama Mapocho, por el río que cruza la
-ciudad. Parte del proyecto LOICA (ANID Fondecyt Regular 1261835).
+Visualization of the demand of Santiago's RED buses and Metro as per-hour
+vector fields over an H3 hexagonal grid, animated as streamlets with deck.gl
+on top of a map. The application is named Mapocho, after the river that
+crosses the city. Part of the LOICA project (ANID Fondecyt Regular 1261835).
 
 **Demo:** https://dcc.uchile.cl/~egraells/loica/scl-flow-vectors/
 
-El repositorio contiene dos piezas encadenadas por archivos JSON en disco, no
-por llamadas en vivo:
+The repository contains two pieces chained by JSON files on disk, not by live
+calls:
 
-- **`src/` + `public/`**: la aplicación web (React + deck.gl + MapLibre) y los
-  scripts de agregación por hora (Python).
-- **`preparar_datos/`**: la conversión de los datos de entrada (viajes + feed
-  GTFS) en todo lo que la aplicación consume.
+- **`src/` + `public/`**: the web application (React + deck.gl + MapLibre)
+  and the per-hour aggregation scripts (Python).
+- **`preparar_datos/`**: the conversion of the input data (trip records +
+  GTFS feed) into everything the application consumes.
 
-El repositorio no versiona datos. Un clon recién bajado no trae los JSON que la
-app importa al compilar: hay que generarlos una vez con
-`bash preparar_datos/generar_todo.sh` antes de `npm start` (ver
-`preparar_datos/README.md`, incluyendo la especificación de los datos de
-entrada y el contrato genérico viajes + GTFS para otras ciudades).
+The repository versions no data. A fresh clone does not have the JSON that the
+app imports at build time: generate it once with
+`bash preparar_datos/generar_todo.sh` before `npm start` (see
+`preparar_datos/README.md`, which includes the input-data specification and
+the generic trips + GTFS contract for other cities).
 
-## Ejecutar la aplicación
+Language note: the documentation is in English; the code comments, the console
+output, and the user interface are in Spanish, the working language of the
+system's users.
+
+## Running the application
 
 ```sh
-npm install        # instala dependencias (una sola vez)
-npm start          # dev server en http://localhost:3000
-npm run build      # sitio estático autocontenido en build/
+npm install        # install dependencies (once)
+npm start          # dev server at http://localhost:3000
+npm run build      # self-contained static site in build/
 ```
 
-Requisitos: Node.js 18 o superior. El basemap usa estilos vectoriales de Carto
-bajo MapLibre GL, sin token ni variables de entorno. `npm install` muestra
-avisos de paquetes deprecados por Create React App; no bloquean la ejecución.
+Requirements: Node.js 18 or newer. The basemap uses Carto vector styles under
+MapLibre GL, with no token and no environment variables. `npm install` prints
+deprecation warnings from Create React App; they do not block execution.
 
-La URL acepta parámetros para compartir vistas exactas (cámara, hora, modo,
-capas y modo de comparación; ver `PARAMS_URL` en `src/App.js`), por ejemplo
+The URL accepts parameters to share exact views (camera, hour, mode, layers,
+and the comparison mode; see `PARAMS_URL` in `src/App.js`), for example
 `?hora=7&modo=buses&lat=-33.527&lon=-70.696&zoom=12.6`.
 
-## Regenerar los datos
+## Regenerating the data
 
 ```sh
-bash preparar_datos/generar_todo.sh              # flujo completo
-MUESTRA=2 bash preparar_datos/generar_todo.sh    # prueba rápida con una muestra
+bash preparar_datos/generar_todo.sh              # full flow
+MUESTRA=2 bash preparar_datos/generar_todo.sh    # quick test on a sample
 ```
 
-El flujo produce la grilla H3, los insumos de Metro derivados del GTFS
-(topología, coordenadas, ruteo y trazado), la red de buses, los segmentos de
-viaje, las matrices por hora y las partículas precalculadas. Python se ejecuta
-con `uv` (el entorno vive en `preparar_datos/pyproject.toml`).
+The flow produces the H3 grid, the Metro inputs derived from the GTFS
+(topology, coordinates, routing, and trace), the bus network, the trip
+segments, the per-hour matrices, and the precomputed particles. Python runs
+through `uv` (the environment lives in `preparar_datos/pyproject.toml`).
 
-Fuentes de entrada para Santiago: las tablas de viajes que publica DTPM
-(https://www.dtpm.cl/index.php/documentos/matrices-de-viaje) y el feed GTFS de
-DTPM (se descarga por URL). Para otra ciudad, el contrato de entrada es
-etapas de viaje referidas a un feed GTFS; los detalles están en
-`preparar_datos/README.md`, sección "Contrato de entrada genérico".
+Input sources for Santiago: the trip tables published by DTPM
+(https://www.dtpm.cl/index.php/documentos/matrices-de-viaje) and the DTPM GTFS
+feed (downloaded by URL). For another city, the input contract is trip stages
+referenced to a GTFS feed; the details are in `preparar_datos/README.md`,
+section "Generic input contract".
 
-## Documentación
+## Documentation
 
-- `preparar_datos/README.md`: flujo de conversión, especificación de entradas
-  y contrato genérico viajes + GTFS.
-- `DATOS.md`: contrato de bajo nivel de los segmentos que lee la agregación.
-- `ARQUITECTURA.md`: propuesta de registro de capas del frontend.
+- `preparar_datos/README.md`: conversion flow, input specification, and the
+  generic trips + GTFS contract.
+- `DATOS.md`: low-level contract of the segments that the aggregation reads.
 
-## Créditos
+## Credits
 
-Alonso Almendras Troncoso y Eduardo Graells-Garrido, Departamento de Ciencias
-de la Computación, Universidad de Chile. Nace de la tesis de Alonso Almendras.
-Datos: DTPM (metodología ADATRAP). Basemap © OpenStreetMap contributors, ©
-CARTO.
+Alonso Almendras Troncoso and Eduardo Graells-Garrido, Department of Computer
+Science, Universidad de Chile. The system grew from Alonso Almendras's thesis.
+Data: DTPM (ADATRAP methodology). Basemap © OpenStreetMap contributors,
+© CARTO.
