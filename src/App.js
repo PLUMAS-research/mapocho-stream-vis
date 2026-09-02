@@ -1512,8 +1512,13 @@ function App() {
         position: 'absolute', top: esMovil ? 12 : 16, left: esMovil ? 12 : 16, zIndex: 11,
         padding: esMovil ? '6px 10px' : '8px 12px', color: 'white'
       }}>
-        <div style={{ fontSize: esMovil ? '12px' : '14px', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-          {'\u{1F426}'} Mapocho - Flujos en SCL
+        <div style={{ fontSize: esMovil ? '12px' : '14px', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <img
+            src={`${process.env.PUBLIC_URL}/loica.png`}
+            alt="Loica, ilustración de Sarai Collilef"
+            style={{ height: esMovil ? 22 : 30, width: 'auto', display: 'block' }}
+          />
+          Mapocho - Flujos en SCL
         </div>
         {!esMovil && <div style={{ fontSize: '10px', color: '#9aa1ad', letterSpacing: '0.05em', marginTop: '2px' }}>
           Proyecto LOICA · ANID Fondecyt Regular 1261835

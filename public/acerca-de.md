@@ -6,4 +6,4 @@ Visualización de la demanda de buses Red y Metro como campos vectoriales por ho
 
 **DATOS**: Tablas de viajes de DTPM estimadas con la metodología ADATRAP a partir de transacciones bip! y GPS de buses; extracto de 10 días laborales (abril y agosto de 2023), expresado como día laboral promedio. La geometría de la red proviene del GTFS de DTPM. 
 
-**CRÉDITOS**: **Alonso Almendras Troncoso** y **Eduardo Graells-Garrido**, Departamento de Ciencias de la Computación, Universidad de Chile. Construida con React, deck.gl y MapLibre GL; basemap © OpenStreetMap contributors, © CARTO.
+**CRÉDITOS**: **Alonso Almendras Troncoso** y **Eduardo Graells-Garrido**, Departamento de Ciencias de la Computación, Universidad de Chile. La ilustración de la loica es obra de **Sarai Collilef**. Construida con React, deck.gl y MapLibre GL; basemap © OpenStreetMap contributors, © CARTO.

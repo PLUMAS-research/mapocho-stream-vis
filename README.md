@@ -69,5 +69,6 @@ section "Generic input contract".
 
 Alonso Almendras Troncoso and Eduardo Graells-Garrido, Department of Computer
 Science, Universidad de Chile. The system grew from Alonso Almendras's thesis.
-Data: DTPM (ADATRAP methodology). Basemap © OpenStreetMap contributors,
+Data: DTPM (ADATRAP methodology). The loica illustration in the header is by
+Sarai Collilef. Basemap © OpenStreetMap contributors,
 © CARTO.
