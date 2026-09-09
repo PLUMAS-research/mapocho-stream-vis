@@ -72,6 +72,10 @@ section "Generic input contract".
   generic trips + GTFS contract.
 - `DATOS.md`: low-level contract of the segments that the aggregation reads.
 
+## License
+
+MIT, see `LICENSE`. The data are distributed by DTPM under its own terms.
+
 ## Credits
 
 Alonso Almendras Troncoso and Eduardo Graells-Garrido, Department of Computer

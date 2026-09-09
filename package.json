@@ -1,8 +1,9 @@
 {
-  "name": "tesis",
+  "name": "mapocho-stream-vis",
   "version": "0.1.0",
   "homepage": ".",
   "private": true,
+  "license": "MIT",
   "dependencies": {
     "@deck.gl/core": "^9.0.36",
     "@deck.gl/geo-layers": "^9.0.36",
