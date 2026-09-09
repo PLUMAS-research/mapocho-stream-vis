@@ -37,6 +37,13 @@ Requirements: Node.js 18 or newer. The basemap uses Carto vector styles under
 MapLibre GL, with no token and no environment variables. `npm install` prints
 deprecation warnings from Create React App; they do not block execution.
 
+The `Makefile` chains these steps with their prerequisites. `make compilar`
+installs the dependencies and generates the data if they are missing, and then
+builds the site. `make publicar` builds and uploads `build/` to the hosting
+through `deploy.sh`, whose destination is configurable by environment
+variables (for example `make publicar NOMBRE=mapocho`). `make` alone lists the
+targets.
+
 The URL accepts parameters to share exact views (camera, hour, mode, layers,
 and the comparison mode; see `PARAMS_URL` in `src/App.js`), for example
 `?hora=7&modo=buses&lat=-33.527&lon=-70.696&zoom=12.6`.
